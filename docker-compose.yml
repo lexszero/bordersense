@@ -1,0 +1,163 @@
+version: "3"
+
+services:
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    command: -c /etc/chirpstack
+    restart: unless-stopped
+    volumes:
+      - ./configuration/chirpstack:/etc/chirpstack
+      - ./lorawan-devices:/opt/lorawan-devices
+    depends_on:
+      - postgres
+      - mosquitto
+      - redis
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - REDIS_HOST=redis
+      - POSTGRESQL_HOST=postgres
+    ports:
+      - 8080:8080
+    networks:
+      - internal
+      - public
+
+  chirpstack-gateway-bridge:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    restart: unless-stopped
+    expose:
+      - 1700/udp
+    volumes:
+      - ./configuration/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+    depends_on:
+      - mosquitto
+    networks:
+      - internal
+
+  rak-packet-forwarder:
+    image: rakwireless/udp-packet-forwarder:latest
+    restart: unless-stopped
+    privileged: true
+    depends_on:
+      - mosquitto
+      - chirpstack-gateway-bridge
+    devices:
+      - "/dev/spidev1.0:/dev/lora_spi"
+      - "/dev/ttyS2:/dev/lora_gps_uart"
+    networks:
+      - internal
+    environment:
+      MODEL: RAK5146
+
+      # When using options 2 or 3 above, you will probably have to specify other features of the module.
+      # These are the defaults:
+      INTERFACE: SPI
+      HAS_GPS: 1
+      #HAS_LTE: "0"
+      RESET_GPIO: 146
+      POWER_EN_GPIO: 0
+      POWER_EN_LOGIC: 0
+
+      # SPI speed is automatically set depending on the concentrator,
+      # but should you have any trouble you can change it like this:
+      SPI_SPEED: 2000000
+
+      # If you have the concentrator connected to a different port
+      # than the default ones ("/dev/spidev0.0" for SPI, "/dev/ttyUSB0" or "/dev/ttyACM0" for USB) 
+      # you can define it this way
+      RADIO_DEV: "/dev/lora_spi"
+
+      # Same for the GPS
+      # GPS_DEV: "/dev/i2c-1"
+      GPS_DEV: "/dev/lora_gps_uart"
+
+      # The service will define the Gateway EUI based on a network interface: eth0, wlan0 or usb0.
+      # If neither of these exist or you want it to use a different interface you can define the NIC this way.
+      # If you want to use the CHIP ID instead, set this value to "chip".
+      #GATEWAY_EUI_SOURCE: "chip"
+
+      # You can also set a custom Gateway EUI (8 bytes in hex format).
+      # This takes precedence over the previous setting
+      GATEWAY_EUI: "5e986f21ee04"
+
+      # Or you can set a completely different LNS server.
+      SERVER_HOST: chirpstack-gateway-bridge
+      SERVER_PORT: 1700
+
+      # The default frequency band is EU868, 
+      # if your module uses a different band you have to select it here:
+      BAND: "eu_863_870"
+
+      # If you want the gateway to report a specific lat/lon/alt you can set them this way:
+      #GPS_LATITUDE: 41.42
+      #GPS_LONGITUDE: 2.12
+      #GPS_ALTITUDE: 0
+
+  node-red:
+    image: nodered/node-red:latest
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+      - mosquitto
+    env_file:
+      - .env
+    ports:
+      - "1880:1880"
+    networks:
+      - internal
+      - public
+    volumes:
+      - data-nodered:/data
+      - ./configuration/node-red/settings.js:/data/settings.js
+
+  influxdb:
+    image: influxdb:latest
+    #security_opt:
+    #  - no-new-privileges:true
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./configuration/influxdb:/etc/influxdb2
+      - data-influxdb:/var/lib/influxdb2
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - ./configuration/postgresql/initdb:/docker-entrypoint-initdb.d
+      - data-postgresql:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=root
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - data-redis:/data
+    networks:
+      - internal
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    expose:
+      - 1883
+    networks:
+      - internal
+    volumes:
+      - ./configuration/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+volumes:
+  data-postgresql:
+  data-redis:
+  data-influxdb:
+  data-nodered:
+
+networks:
+  internal:
+  public:
