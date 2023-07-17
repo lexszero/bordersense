@@ -1,0 +1,313 @@
+{
+    "device_type": "EM340",
+    "device": {
+        "name": "EM340",
+        "id": "em340",
+
+        "holding_blocks": [
+          {
+            "U": [0, 1, 2, 3, 4, 5, 18, 19],
+            "I": [6, 7, 8],
+            "power": [9, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21, 22],
+            "PF": [23, 24, 25, 26],
+            "frequency": [28],
+            "energy": [29, 30]
+          }
+        ],
+        "channels": [
+            {
+                "name": "U L1",
+                "reg_type": "holding",
+                "address": "0x0000",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L2",
+                "reg_type": "holding",
+                "address": "0x0002",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L3",
+                "reg_type": "holding",
+                "address": "0x0004",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L1-L2",
+                "reg_type": "holding",
+                "address": "0x0006",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L2-L3",
+                "reg_type": "holding",
+                "address": "0x0008",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L3-L1",
+                "reg_type": "holding",
+                "address": "0x000A",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I L1",
+                "reg_type": "holding",
+                "address": "0x000C",
+                "type": "current",
+                "format": "s32",
+                "scale": 0.001,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I L2",
+                "reg_type": "holding",
+                "address": "0x000E",
+                "type": "current",
+                "format": "s32",
+                "scale": 0.001,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I L3",
+                "reg_type": "holding",
+                "address": "0x0010",
+                "type": "current",
+                "format": "s32",
+                "scale": 0.001,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P L1",
+                "reg_type": "holding",
+                "address": "0x0012",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P L2",
+                "reg_type": "holding",
+                "address": "0x0014",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P L3",
+                "reg_type": "holding",
+                "address": "0x0016",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L1",
+                "reg_type": "holding",
+                "address": "0x0018",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L2",
+                "reg_type": "holding",
+                "address": "0x001A",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L3",
+                "reg_type": "holding",
+                "address": "0x001C",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L1",
+                "reg_type": "holding",
+                "address": "0x001E",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L2",
+                "reg_type": "holding",
+                "address": "0x0020",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L3",
+                "reg_type": "holding",
+                "address": "0x0022",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L-N sys",
+                "reg_type": "holding",
+                "address": "0x0024",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L-L sys",
+                "reg_type": "holding",
+                "address": "0x0026",
+                "type": "voltage",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Total P",
+                "reg_type": "holding",
+                "address": "0x0028",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Total S",
+                "reg_type": "holding",
+                "address": "0x002A",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Total Q",
+                "reg_type": "holding",
+                "address": "0x002C",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "PF L1",
+                "reg_type": "holding",
+                "address": "0x002E",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.001
+            },
+            {
+                "name": "PF L2",
+                "reg_type": "holding",
+                "address": "0x002F",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.001
+            },
+            {
+                "name": "PF L3",
+                "reg_type": "holding",
+                "address": "0x0030",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.001
+            },
+            {
+                "name": "Total PF",
+                "reg_type": "holding",
+                "address": "0x0031",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.001
+            },
+            {
+                "name": "Phase sequence",
+                "reg_type": "holding",
+                "address": "0x0032",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.001
+            },
+            {
+                "name": "Frequency",
+                "reg_type": "holding",
+                "address": "0x0033",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.1
+            },
+            {
+                "name": "Total P energy",
+                "reg_type": "holding",
+                "address": "0x0034",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Total Q energy",
+                "reg_type": "holding",
+                "address": "0x0036",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P dmd",
+                "reg_type": "holding",
+                "address": "0x0038",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P dmd peak",
+                "reg_type": "holding",
+                "address": "0x003A",
+                "type": "power",
+                "format": "s32",
+                "scale": 0.1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {}
+        ]
+
+    }
+}
