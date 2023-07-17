@@ -521,6 +521,29 @@
             }
         },
 
+        "input_blocks":[
+            {
+                "frequency": [0]
+            },
+            "U_phase_angle",
+            "ch1_power",
+            {
+                "ch1_Irms": [3,4,5],
+                "U": [0, 1, 2, 6, 7, 8]
+            },
+            "U_peak",
+            "ch1_Ipeak",
+            "ch2_power",
+            "ch2_Irms",
+            "ch2_Ipeak",
+            "ch3_power",
+            "ch3_Irms",
+            "ch3_Ipeak",
+            "ch4_power",
+            "ch4_Irms",
+            "ch4_Ipeak"
+        ],
+
         "channels": [
             {
                 "name": "Ch 1 Irms L1",

@@ -2,41 +2,19 @@ import logging, json, re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, List, Dict, Optional
-from pymodbus.register_read_message import ReadInputRegistersRequest
+from pymodbus.register_read_message import ReadInputRegistersRequest, ReadHoldingRegistersRequest
 from pymodbus.factory import ClientDecoder as ModbusClientDecoder
 from pymodbus.transaction import ModbusRtuFramer
 
 log = logging.getLogger('wb-map12e')
 mb_framer = ModbusRtuFramer(ModbusClientDecoder())
 
-block_desc = [
-        {
-            'frequency': [0],
-        },
-        'U_phase_angle',
-        'ch1_power',
-        {
-            'ch1_Irms': [3,4,5],
-            'U': [0, 1, 2, 6, 7, 8]
-        },
-        'U_peak',
-        'ch1_Ipeak',
-        'ch2_power',
-        'ch2_Irms',
-        'ch2_Ipeak',
-        'ch3_power',
-        'ch3_Irms',
-        'ch3_Ipeak',
-        'ch4_power',
-        'ch4_Irms',
-        'ch4_Ipeak'
-        ]
-
-
 def is_skipped(chan):
-    if chan['group'] == 'hw_info':
+    if 'name' not in chan:
         return True
-    return any([word in chan['name'] for word in ['energy', 'PF', 'Phase angle']])
+    if chan.get('group') == 'hw_info':
+        return True
+    return any([re.match(regex, chan['name']) for regex in [r'Ch.*energy', r'Ch \d .*PF', r'.*Phase angle']])
 
 def get_channel_size(chan) -> int:
     fmt = chan.get('format', 'u16')
@@ -99,7 +77,8 @@ class RegisterBlock:
     size: int
     chans: List[Dict[str, Any]]
     desc: Optional[Dict[str, List[int]]]
-    def __init__(self, desc, start, size):
+
+    def __init__(self, desc, method, start, size):
         if isinstance(desc, str):
             self.name = desc
             self.desc = None
@@ -109,9 +88,13 @@ class RegisterBlock:
         self.start = start
         self.size = size
         self.chans = []
+        if method == 'input':
+            self.request = ReadInputRegistersRequest
+        elif method == 'holding':
+            self.request = ReadHoldingRegistersRequest
 
     def build_read_request(self, slave_addr: int) -> str:
-        req = ReadInputRegistersRequest(self.start, self.size, slave_addr)
+        req = self.request(self.start, self.size, slave_addr)
         return mb_framer.buildPacket(req)
 
     def gen_decoder_measurement(self, measurement, chan_list, tags={}, offset=0):
@@ -146,51 +129,74 @@ class RegisterBlock:
             return [self.gen_decoder_measurement(self.name, range(len(self.chans)), *args, **kwargs)]
 
 
-def parse_map12_config(json_path='config-map12e-fw2.json'):
-    config = None
-    with open(json_path, 'r') as f:
-        config = json.load(f)
+class ModbusDevice:
+    config: Dict[str, Any]
+    input_regs: Dict[int, Dict[str, Any]]
+    holding_regs: Dict[int, Dict[str, Any]]
+    input_blocks: List[RegisterBlock]
+    holding_blocks: List[RegisterBlock]
 
-    def empty_list() -> list[Any]:
-        return []
+    def __init__(self, config_file, max_response_bytes=None):
+        with open(config_file, 'r') as f:
+            self.config = json.load(f)
+    
+        self.input_regs = {}
+        self.holding_regs = {}
+        self.input_blocks = []
+        self.holding_blocks = []
 
-    groups: defaultdict[str, List[Any]] = defaultdict(empty_list)
-    inputs: Dict[int, Dict[str, Any]] = {}
-    for chan in config['device']['channels']:
-        addr = chan['address']
-        if is_skipped(chan):
-            continue
-        if isinstance(addr, str):
-            addr = int(addr, 16)
-        grp = groups[chan['group']]
-        if chan['reg_type'] == 'input':
-            inputs[addr] = chan
-            grp.append(chan)
+        for chan in self.config['device']['channels']:
+            if is_skipped(chan):
+                continue
+            addr = chan['address']
+            if isinstance(addr, str):
+                addr = int(addr, 16)
+            if chan['reg_type'] == 'input':
+                self.input_regs[addr] = chan
+            elif chan['reg_type'] == 'holding':
+                self.holding_regs[addr] = chan
 
-    next_addr = -1
-    blocks: List[RegisterBlock] = []
-    sorted_inputs = sorted(inputs.items())
-    block = RegisterBlock(block_desc[0], sorted_inputs[0][0], 0)
-    block_idx = 0
-    for addr, chan in sorted(inputs.items()):
-        if next_addr >= 0 and addr != next_addr:
+        self.split_into_blocks(max_response_bytes=max_response_bytes)
+
+    @property
+    def all_blocks(self):
+        return self.input_blocks + self.holding_blocks
+
+    def split_into_blocks(self, *args, **kwargs):
+        self.input_blocks = self._split_into_blocks('input', self.input_regs, *args, **kwargs)
+        self.holding_blocks = self._split_into_blocks('holding', self.holding_regs, *args, **kwargs)
+
+    def _split_into_blocks(self, method, regs, max_response_bytes=None):
+        block_desc = self.config['device'].get(method+'_blocks', [])
+        if not block_desc:
+            return []
+        next_addr = -1
+        blocks: List[RegisterBlock] = []
+        sorted_inputs = sorted(regs.items())
+        block = RegisterBlock(block_desc[0], method, sorted_inputs[0][0], 0)
+        block_idx = 0
+        for addr, chan in sorted(regs.items()):
+            log.debug(f"{block_idx=} {addr=} {chan['name']}")
+            if addr == next_addr:
+                s_addr = '------'
+            else:
+                s_addr = f'0x{addr:04x}'
+
+            size = get_channel_size(chan)
+            if next_addr >= 0 and addr != next_addr:
+                blocks.append(block)
+                block_idx += 1
+                block = RegisterBlock(block_desc[block_idx], method, addr, 0)
+
+            block.chans.append(chan)
+            block.size += size
+            next_addr = addr + size
+            log.debug(f"{s_addr}: {chan.get('group', ''):<16} {chan['name']:<32} {chan.get('format', ''):<5}")
+        if block:
             blocks.append(block)
-            block_idx += 1
-            block = RegisterBlock(block_desc[block_idx], addr, 0)
 
-        if addr == next_addr:
-            s_addr = '------'
-        else:
-            s_addr = f'0x{addr:04x}'
+        return blocks
 
-        size = get_channel_size(chan)
-        block.chans.append(chan)
-        block.size += size
-        next_addr = addr + size
-        log.debug(f"{s_addr}: {chan.get('group', ''):<16} {chan['name']:<32} {chan.get('format', ''):<5}")
-    if block:
-        blocks.append(block)
-
-    return blocks
-
-
+    def read_requests(self, slave_addr):
+        for b in self.all_blocks:
+            yield b.build_read_request(slave_addr)

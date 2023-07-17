@@ -9,19 +9,22 @@ power_areas = [
         ]
 
 def load_geojson(name, rename=None, style=None):
-    j: geojson.FeatureCollection = geojson.load(open(f"BL_2023_power_grid_offline/{name}.geojson"))
+    j: geojson.FeatureCollection = geojson.load(open(f"tmp/BL_2023_power_grid_offline/{name}.geojson"))
 
     if style:
         j.style = style
     for feature in j.features:
         feature.properties = {k: v for k, v in feature.properties.items() if v is not None}
         if rename:
-            feature.properties[rename] = feature.properties['Name']
+            #feature.properties[rename] = feature.properties['Name']
+            feature['id'] = feature.properties['Name']
             del(feature.properties['Name'])
-
     del(j.crs)
 
     return j
+
+def flatten(l):
+    return [item for sublist in l for item in sublist]
 
 def gen_layer(name, items, style={}, **kwargs):
     geo = {
@@ -47,16 +50,14 @@ style = {
         "fill-opacity": 0.2
         }
 
-layer_basemap = gen_layer('Areas',
-        [
+basemap_areas = {
+        'type': 'FeatureCollection',
+        'features': flatten([x.features for x in [
             load_geojson('Sections_2023', rename='Area'),
             load_geojson('Roads', rename='Road')
-        ],
-        style=style,
-        clickable=False
-        )
+    ]])}
 
-layer_power = gen_layer('Power',
-        map(load_geojson, ['NORTH', 'SOUTH', 'Barn_and_the_hill']))
+#layer_power = gen_layer('Power',
+#        map(load_geojson, ['NORTH', 'SOUTH', 'Barn_and_the_hill']))
 
-print(geojson.dumps([layer_basemap, layer_power]))
+print(geojson.dump(basemap_areas, open('map_areas.json', 'w')))

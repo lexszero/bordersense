@@ -25,6 +25,8 @@ def chan_value(name):
         return 10
     elif 'Ipeak' in name:
         return 15
+    elif 'I' in name:
+        return 12
     elif 'Frequency' in name:
         return 50.0
     elif name == 'Voltage angle L1':
