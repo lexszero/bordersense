@@ -12,7 +12,7 @@ from pymodbus.datastore import (
 from pymodbus.transaction import ModbusRtuFramer
 from pymodbus.payload import BinaryPayloadBuilder
 
-from wb_map12e_common import is_skipped
+from modbus_device import is_skipped
 
 log = logging.getLogger()
 coloredlogs.install(
