@@ -10,6 +10,7 @@ devtools = "*"
 pymodbus = "*"
 coloredlogs = "*"
 pexpect-serial = "*"
+chirpstack-api = "*"
 
 [dev-packages]
 

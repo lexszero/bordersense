@@ -1,0 +1,760 @@
+{
+    "device_type": "SDM630",
+    "device": {
+        "name": "SDM630",
+        "id": "em340",
+
+        "input_blocks": [
+          {
+            "U": [0, 1, 2],
+            "I": [3, 4, 5],
+            "power": [6,7,8,9,10,11,12,13,14],
+            "PF": [15, 16, 17]
+          },
+          "power",
+          "power",
+          {
+            "power": [0],
+            "PF": [1]
+          },
+          "frequency",
+          "U",
+          "PF"
+        ],
+        "channels": [
+            {
+                "name": "U L1",
+                "reg_type": "input",
+                "address": "0x0000",
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF",
+                "aup_idx": 0
+            },
+            {
+                "name": "U L2",
+                "reg_type": "input",
+                "address": "0x0002",
+                "type": "voltage",
+                "format": "float",
+                "aup_idx": 1,
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L3",
+                "reg_type": "input",
+                "address": "0x0004",
+                "type": "voltage",
+                "format": "float",
+                "aup_idx": 2,
+                "error_value": "0x7FFFFFFF"
+            },
+
+            {
+                "name": "I L1",
+                "reg_type": "input",
+                "address": "0x0006",
+                "aup_idx": 7,
+                "type": "current",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I L2",
+                "reg_type": "input",
+                "address": "0x0008",
+                "aup_idx": 8,
+                "type": "current",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I L3",
+                "reg_type": "input",
+                "address": "0x000A",
+                "aup_idx": 9,
+                "type": "current",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+
+            {
+                "name": "P L1",
+                "reg_type": "input",
+                "address": "0x000C",
+                "aup_idx": 16,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P L2",
+                "reg_type": "input",
+                "address": "0x000E",
+                "aup_idx": 17,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "P L3",
+                "reg_type": "input",
+                "address": "0x0010",
+                "aup_idx": 18,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L1",
+                "reg_type": "input",
+                "address": "0x0012",
+                "aup_idx": 24,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L2",
+                "reg_type": "input",
+                "address": "0x0014",
+                "aup_idx": 25,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "S L3",
+                "reg_type": "input",
+                "address": "0x0016",
+                "aup_idx": 26,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L1",
+                "reg_type": "input",
+                "address": "0x0018",
+                "aup_idx": 20,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L2",
+                "reg_type": "input",
+                "address": "0x001A",
+                "aup_idx": 21,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "Q L3",
+                "reg_type": "input",
+                "address": "0x001C",
+                "aup_idx": 22,
+                "type": "power",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+
+            {
+                "name": "PF L1",
+                "reg_type": "input",
+                "address": "0x001E",
+                "aup_idx": 12,
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "PF L2",
+                "reg_type": "input",
+                "address": "0x0020",
+                "aup_idx": 13,
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "PF L3",
+                "reg_type": "input",
+                "address": "0x0022",
+                "aup_idx": 14,
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "Phase angle L1",
+                "reg_type": "input",
+                "address": "0x0024",
+                "aup_idx": 28,
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "Phase angle L2",
+                "reg_type": "input",
+                "address": "0x0026",
+                "aup_idx": 29,
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "Phase angle L3",
+                "reg_type": "input",
+                "address": "0x0028",
+                "aup_idx": 30,
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "U average",
+                "reg_type": "input",
+                "address": "0x002A",
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "I average",
+                "reg_type": "input",
+                "address": "0x002E",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "I Total",
+                "reg_type": "input",
+                "address": "0x0030",
+                "aup_idx": 10,
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "Total P",
+                "reg_type": "input",
+                "address": "0x0034",
+                "aup_idx": 19,
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total S",
+                "reg_type": "input",
+                "address": "0x0038",
+                "aup_idx": 27,
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total Q",
+                "reg_type": "input",
+                "address": "0x003C",
+                "aup_idx": 23,
+                "type": "power",
+                "format": "float"
+            },
+
+            {
+                "name": "Total PF",
+                "reg_type": "input",
+                "address": "0x003E",
+                "aup_idx": 15,
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "Total phase angle",
+                "reg_type": "input",
+                "address": "0x0042",
+                "aup_idx": 31,
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "Frequency",
+                "reg_type": "input",
+                "address": "0x0046",
+                "aup_idx": 6,
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "Total AP energy",
+                "reg_type": "input",
+                "address": "0x0048",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total AN energy",
+                "reg_type": "input",
+                "address": "0x004A",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "Total RP energy",
+                "reg_type": "input",
+                "address": "0x004C",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total RN energy",
+                "reg_type": "input",
+                "address": "0x004E",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total S energy",
+                "reg_type": "input",
+                "address": "0x0050",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "Ah",
+                "reg_type": "input",
+                "address": "0x0052",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "Total P demand",
+                "reg_type": "input",
+                "address": "0x0054",
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total P demand peak",
+                "reg_type": "input",
+                "address": "0x0056",
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total S demand",
+                "reg_type": "input",
+                "address": "0x0064",
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total S demand peak",
+                "reg_type": "input",
+                "address": "0x0066",
+                "type": "power",
+                "format": "float"
+            },
+
+            {
+                "name": "I neutral demand",
+                "reg_type": "input",
+                "address": "0x0068",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "I neutral demand peak",
+                "reg_type": "input",
+                "address": "0x006A",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "Total Q demand",
+                "reg_type": "input",
+                "address": "0x006C",
+                "type": "power",
+                "format": "float"
+            },
+            {
+                "name": "Total Q demand peak",
+                "reg_type": "input",
+                "address": "0x006E",
+                "type": "power",
+                "format": "float"
+            },
+
+            {
+                "name": "U L1-L2",
+                "reg_type": "input",
+                "address": "0x00C8",
+                "aup_idx": 3,
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L2-L3",
+                "reg_type": "input",
+                "address": "0x00CA",
+                "aup_idx": 4,
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L3-L1",
+                "reg_type": "input",
+                "address": "0x00CC",
+                "aup_idx": 5,
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+            {
+                "name": "U L-L average",
+                "reg_type": "input",
+                "address": "0x00CE",
+                "type": "voltage",
+                "format": "float",
+                "error_value": "0x7FFFFFFF"
+            },
+
+            {
+                "name": "I neutral",
+                "reg_type": "input",
+                "address": "0x00E0",
+                "aup_idx": 11,
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "U THD L1",
+                "reg_type": "input",
+                "address": "0x00EA",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD L2",
+                "reg_type": "input",
+                "address": "0x00EC",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD L3",
+                "reg_type": "input",
+                "address": "0x00EE",
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "I THD L1",
+                "reg_type": "input",
+                "address": "0x00F0",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "I THD L2",
+                "reg_type": "input",
+                "address": "0x00F2",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "I THD L3",
+                "reg_type": "input",
+                "address": "0x00F4",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD LN average",
+                "reg_type": "input",
+                "address": "0x00F8",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "I THD average",
+                "reg_type": "input",
+                "address": "0x00FA",
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "I demand L1",
+                "reg_type": "input",
+                "address": "0x0102",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "I demand L2",
+                "reg_type": "input",
+                "address": "0x0104",
+                "type": "current",
+                "format": "float"
+            },            {
+                "name": "I demand L3",
+                "reg_type": "input",
+                "address": "0x0106",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "I demand peak L1",
+                "reg_type": "input",
+                "address": "0x0108",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "I demand peak L2",
+                "reg_type": "input",
+                "address": "0x010A",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "I demand peak L3",
+                "reg_type": "input",
+                "address": "0x010C",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "U THD L1-L2",
+                "reg_type": "input",
+                "address": "0x014E",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD L2-L3",
+                "reg_type": "input",
+                "address": "0x0150",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD L3-L1",
+                "reg_type": "input",
+                "address": "0x0152",
+                "type": "value",
+                "format": "float"
+            },
+            {
+                "name": "U THD LL average",
+                "reg_type": "input",
+                "address": "0x0154",
+                "type": "value",
+                "format": "float"
+            },
+
+            {
+                "name": "Total P energy",
+                "reg_type": "input",
+                "address": "0x0156",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total Q energy",
+                "reg_type": "input",
+                "address": "0x0158",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "AP energy L1",
+                "reg_type": "input",
+                "address": "0x015A",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "AP energy L2",
+                "reg_type": "input",
+                "address": "0x015C",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "AP energy L3",
+                "reg_type": "input",
+                "address": "0x015E",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "AN energy L1",
+                "reg_type": "input",
+                "address": "0x0160",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "AN energy L2",
+                "reg_type": "input",
+                "address": "0x0162",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "AN energy L3",
+                "reg_type": "input",
+                "address": "0x0164",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "P energy L1",
+                "reg_type": "input",
+                "address": "0x0166",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "P energy L2",
+                "reg_type": "input",
+                "address": "0x0168",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "P energy L3",
+                "reg_type": "input",
+                "address": "0x016A",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "RP energy L1",
+                "reg_type": "input",
+                "address": "0x016C",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "RP energy L2",
+                "reg_type": "input",
+                "address": "0x016E",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "RP energy L3",
+                "reg_type": "input",
+                "address": "0x0170",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "RN energy L1",
+                "reg_type": "input",
+                "address": "0x0172",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "RN energy L2",
+                "reg_type": "input",
+                "address": "0x0174",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "RN energy L3",
+                "reg_type": "input",
+                "address": "0x0176",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "Q energy L1",
+                "reg_type": "input",
+                "address": "0x0178",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "Q energy L2",
+                "reg_type": "input",
+                "address": "0x017A",
+                "type": "current",
+                "format": "float"
+            },
+            {
+                "name": "Q energy L3",
+                "reg_type": "input",
+                "address": "0x017C",
+                "type": "current",
+                "format": "float"
+            },
+
+            {
+                "name": "Total P energy rst",
+                "reg_type": "input",
+                "address": "0x0180",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total Q energy rst",
+                "reg_type": "input",
+                "address": "0x0182",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "Total AP energy rst",
+                "reg_type": "input",
+                "address": "0x0184",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total AN energy rst",
+                "reg_type": "input",
+                "address": "0x0186",
+                "type": "energy",
+                "format": "float"
+            },
+
+            {
+                "name": "Total RP energy rst",
+                "reg_type": "input",
+                "address": "0x0188",
+                "type": "energy",
+                "format": "float"
+            },
+            {
+                "name": "Total RN energy rst",
+                "reg_type": "input",
+                "address": "0x018A",
+                "type": "energy",
+                "format": "float"
+            }
+        ]
+
+    }
+}
