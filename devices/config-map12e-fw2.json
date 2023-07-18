@@ -522,9 +522,8 @@
         },
 
         "input_blocks":[
-            {
-                "frequency": [0]
-            },
+            "ch1_PF",
+            "frequency",
             "U_phase_angle",
             "ch1_power",
             {
@@ -533,12 +532,15 @@
             },
             "U_peak",
             "ch1_Ipeak",
+            "ch2_PF",
             "ch2_power",
             "ch2_Irms",
             "ch2_Ipeak",
+            "ch3_PF",
             "ch3_power",
             "ch3_Irms",
             "ch3_Ipeak",
+            "ch4_PF",
             "ch4_power",
             "ch4_Irms",
             "ch4_Ipeak"

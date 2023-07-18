@@ -289,7 +289,7 @@
                 "error_value": "0x7FFFFFFF"
             },
             {
-                "name": "P dmd",
+                "name": "Total P demand",
                 "reg_type": "holding",
                 "address": "0x0038",
                 "type": "power",
@@ -298,7 +298,7 @@
                 "error_value": "0x7FFFFFFF"
             },
             {
-                "name": "P dmd peak",
+                "name": "Total P demand peak",
                 "reg_type": "holding",
                 "address": "0x003A",
                 "type": "power",
