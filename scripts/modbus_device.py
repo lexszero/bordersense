@@ -6,7 +6,7 @@ from pymodbus.register_read_message import ReadInputRegistersRequest, ReadHoldin
 from pymodbus.factory import ClientDecoder as ModbusClientDecoder
 from pymodbus.transaction import ModbusRtuFramer
 
-log = logging.getLogger('wb-map12e')
+log = logging.getLogger('mbdev')
 mb_framer = ModbusRtuFramer(ModbusClientDecoder())
 
 def is_skipped(chan):
@@ -14,7 +14,17 @@ def is_skipped(chan):
         return True
     if chan.get('group') == 'hw_info':
         return True
-    return any([re.match(regex, chan['name']) for regex in [r'Ch.*energy', r'Ch \d .*PF', r'.*Phase angle']])
+    return any([re.match(regex, chan['name']) for regex in [
+        r'Ch.*energy',
+        r'Ch.*Voltage angle',
+        r'.*[Pp]hase angle',
+        r'.*THD',
+        r'.*energy',
+        r'.*demand',
+        r'.*average',
+        r'.*I sum',
+        r'Ah,'
+        ]])
 
 def get_channel_size(chan) -> int:
     fmt = chan.get('format', 'u16')
@@ -24,7 +34,8 @@ def get_channel_size(chan) -> int:
             's32': 2,
             'u32': 2,
             's64': 4,
-            'u64': 4
+            'u64': 4,
+            'float': 2
             }
 
     if fmt == 'string':
@@ -44,15 +55,18 @@ def gen_chan_decoder(chan, start_address, buf='buf', offset=0):
     word_order = chan.get('word_order', 'big_endian')
     offset = offset + (int(chan['address'], 16) - start_address) * 2
     ret = ''
+    errvals = []
     if fmt in ['s16', 'u16']:
         errvals = [0xffff]
         ret = f'({buf}[{offset}] << 8) | {buf}[{offset+1}]'
     elif fmt in ['s32', 'u32']:
         errvals = [0xffffffff]
         if word_order == 'little_endian':
-            ret = f'({buf}[{offset}] << 8) | ({buf}[{offset+1}]) | ({buf}[{offset+2}] << 24) | ({buf}[{offset+3}] << 16)'
+            ret = f'({buf}[{offset+2}] << 24) | ({buf}[{offset+3}] << 16) | ({buf}[{offset+0}] << 8) | ({buf}[{offset+1}] << 0)'
         else:
-            ret = f'({buf}[{offset+2}] << 8) | ({buf}[{offset+3}]) | ({buf}[{offset}] << 24) | ({buf}[{offset+1}] << 16)'
+            ret = f'({buf}[{offset+0}] << 24) | ({buf}[{offset+1}] << 16) | ({buf}[{offset+2}] << 8) | ({buf}[{offset+3}] << 0)'
+    elif fmt == 'float':
+        ret = f'({buf}.readFloat({buf}[{offset}])'
     else:
         raise RuntimeError(f"Unsupported format: {fmt}")
 
@@ -156,6 +170,7 @@ class ModbusDevice:
             elif chan['reg_type'] == 'holding':
                 self.holding_regs[addr] = chan
 
+        log.info(f"Loaded device config, {len(self.holding_regs)} holding, {len(self.input_regs)} input")
         self.split_into_blocks(max_response_bytes=max_response_bytes)
 
     @property
@@ -186,7 +201,11 @@ class ModbusDevice:
             if next_addr >= 0 and addr != next_addr:
                 blocks.append(block)
                 block_idx += 1
-                block = RegisterBlock(block_desc[block_idx], method, addr, 0)
+                if block_idx >= len(block_desc):
+                    desc = f'new_block_{block_idx}'
+                else:
+                    desc = block_desc[block_idx]
+                block = RegisterBlock(desc, method, addr, 0)
 
             block.chans.append(chan)
             block.size += size

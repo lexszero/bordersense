@@ -6,12 +6,12 @@ from typing import Any, List, Dict, Optional
 import serial
 from pexpect_serial import SerialSpawn
 
-from modbus_device import ModbusDevice
+from modbus_device import ModbusDevice, sanitize_chan_name
 
 log = logging.getLogger('genconf')
 coloredlogs.install(
         fmt="%(name)s %(levelname)s: %(message)s",
-        level=logging.DEBUG
+        level=logging.INFO
         )
 
 class ATCommandError(Exception):
@@ -66,8 +66,7 @@ class TransportRAK7431(Transport):
                 'AT+PARITY=NONE',
                 'AT+DTUMODE=MODBUS',
                 'AT+TRANSPARENT=0',
-                'AT+MODBUSRETRY=0',
-                'AT+POLLPERIOD=120',
+                'AT+POLLPERIOD=300',
                 'AT+ENABLEPOLL=0'
                 ]
 
@@ -289,7 +288,7 @@ def main():
     else:
         raise RuntimeError("Unsupported transport")
 
-    dev = ModbusDevice(args.config, max_response_bytes=transport.MAX_RESPONSE_BYTES)
+    dev = ModbusDevice(args.config)
 
     total_regs = 0
     all_blocks = dev.all_blocks

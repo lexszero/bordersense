@@ -2,6 +2,7 @@
 import logging, coloredlogs
 import asyncio
 import json
+import re
 
 from pymodbus.server import StartAsyncSerialServer
 from pymodbus.datastore import (
@@ -35,7 +36,7 @@ def chan_value(name):
         return 120
     elif name == 'Voltage angle L2':
         return -120
-    elif 'Total P' in name:
+    elif re.match(r'^Total P\W', name):
         return 50
     elif 'P L' in name:
         return 16.6
@@ -76,6 +77,7 @@ def build_map12_datablock():
             b = BinaryPayloadBuilder(byteorder='>', wordorder='>')
         real_val = chan_value(name)
         val = int(real_val/scale)
+        log.info(f"Reg 0x{addr:04x}={addr} {name} = {real_val} {fmt}")
         if fmt == 's16':
             b.add_16bit_int(val)
         elif fmt == 'u16':
