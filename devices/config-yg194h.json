@@ -1,0 +1,295 @@
+{
+    "device_type": "YG194H",
+    "device": {
+        "name": "YG194H",
+        "id": "yg194h",
+
+        "input_blocks": [
+          "all"
+        ],
+        "channels": [
+            {
+                "name": "U L1",
+                "reg_type": "input",
+                "address": "0x0000",
+                "type": "voltage",
+                "format": "u16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "U L2",
+                "reg_type": "input",
+                "address": "0x0001",
+                "type": "voltage",
+                "format": "u16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "U L3",
+                "reg_type": "input",
+                "address": "0x0002",
+                "type": "voltage",
+                "format": "u16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "I L1",
+                "reg_type": "input",
+                "address": "0x0003",
+                "type": "current",
+                "format": "s16",
+                "limit": 3000,
+                "scale": 0.030
+            },
+            {
+                "name": "I L2",
+                "reg_type": "input",
+                "address": "0x0004",
+                "type": "current",
+                "format": "s16",
+                "limit": 3000,
+                "scale": 0.030
+            },
+            {
+                "name": "I L3",
+                "reg_type": "input",
+                "address": "0x005",
+                "type": "current",
+                "format": "s16",
+                "limit": 3000,
+                "scale": 0.030
+            },
+            {
+                "name": "I N",
+                "reg_type": "input",
+                "address": "0x006",
+                "type": "current",
+                "format": "s16",
+                "limit": 3000,
+                "scale": 0.030
+            },
+
+            {
+                "name": "P Total",
+                "reg_type": "input",
+                "address": "0x0007",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "P L1",
+                "reg_type": "input",
+                "address": "0x0008",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "P L2",
+                "reg_type": "input",
+                "address": "0x0009",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "P L3",
+                "reg_type": "input",
+                "address": "0x000a",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+
+            {
+                "name": "Q Total",
+                "reg_type": "input",
+                "address": "0x000b",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "Q L1",
+                "reg_type": "input",
+                "address": "0x000c",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "Q L2",
+                "reg_type": "input",
+                "address": "0x000d",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "Q L3",
+                "reg_type": "input",
+                "address": "0x000e",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+
+            {
+                "name": "S Total",
+                "reg_type": "input",
+                "address": "0x000f",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "S L1",
+                "reg_type": "input",
+                "address": "0x0010",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "S L2",
+                "reg_type": "input",
+                "address": "0x0011",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+            {
+                "name": "S L3",
+                "reg_type": "input",
+                "address": "0x0012",
+                "type": "power",
+                "scale": 30,
+                "format": "s16"
+            },
+
+            {
+                "name": "PF Total",
+                "reg_type": "input",
+                "address": "0x0013",
+                "type": "value",
+                "scale": 0.001,
+                "format": "s16"
+            },
+            {
+                "name": "PF L1",
+                "reg_type": "input",
+                "address": "0x0014",
+                "type": "value",
+                "scale": 0.001,
+                "format": "s16"
+            },
+            {
+                "name": "PF L2",
+                "reg_type": "input",
+                "address": "0x0015",
+                "type": "value",
+                "scale": 0.001,
+                "format": "s16"
+            },
+            {
+                "name": "PF L3",
+                "reg_type": "input",
+                "address": "0x0016",
+                "type": "value",
+                "scale": 0.001,
+                "format": "s16"
+            },
+
+            {
+                "name": "U L1-L2",
+                "reg_type": "input",
+                "address": "0x0017",
+                "type": "voltage",
+                "format": "s16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "U L2-L3",
+                "reg_type": "input",
+                "address": "0x0018",
+                "type": "voltage",
+                "format": "s16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "U L3-L1",
+                "reg_type": "input",
+                "address": "0x0019",
+                "type": "voltage",
+                "format": "s16",
+                "limit": 10000,
+                "scale": 0.1
+            },
+            {
+                "name": "Frequency L1",
+                "reg_type": "input",
+                "address": "0x001a",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.01
+            },
+            {
+                "name": "Frequency L2",
+                "reg_type": "input",
+                "address": "0x001b",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.01
+            },
+            {
+                "name": "Frequency L3",
+                "reg_type": "input",
+                "address": "0x001c",
+                "type": "value",
+                "format": "s16",
+                "scale": 0.01
+            },
+
+            {
+                "name": "Total P+ energy",
+                "reg_type": "input",
+                "address": "0x001d",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.001
+            },
+            {
+                "name": "Total P- energy",
+                "reg_type": "input",
+                "address": "0x001f",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.001
+            },
+
+            {
+                "name": "Total Q+ energy",
+                "reg_type": "input",
+                "address": "0x0021",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.001
+            },
+            {
+                "name": "Total Q- energy",
+                "reg_type": "input",
+                "address": "0x0023",
+                "type": "energy",
+                "format": "s32",
+                "scale": 0.001
+            }
+        ]
+
+    }
+}
