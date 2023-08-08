@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import enum
+import os
 import logging, coloredlogs, argparse, re
 from typing import Any, List, Dict, Optional
 
@@ -8,11 +8,30 @@ from pexpect_serial import SerialSpawn
 
 from modbus_device import ModbusDevice, sanitize_chan_name
 
+import grpc
+from chirpstack_api import api
+
 log = logging.getLogger('genconf')
 coloredlogs.install(
         fmt="%(name)s %(levelname)s: %(message)s",
         level=logging.INFO
         )
+
+CHIRPSTACK_SERVER = 'gw-rpi:8080'
+CHIRPSTACK_API_TOKEN = os.environ.get('CHIRPSTACK_API_TOKEN')
+channel = grpc.insecure_channel(CHIRPSTACK_SERVER)
+auth_token = [("authorization", "Bearer %s" % CHIRPSTACK_API_TOKEN)]
+
+chirpstack_dev_service = api.DeviceServiceStub(channel)
+
+def send_lora_cmd(dev_eui, fport, buf):
+    req = api.EnqueueDeviceQueueItemRequest()
+    req.queue_item.confirmed = True
+    req.queue_item.data = bytes(buf)
+    req.queue_item.dev_eui = dev_eui
+    req.queue_item.f_port = fport
+    return chirpstack_dev_service.Enqueue(req, metadata=auth_token)
+
 
 class ATCommandError(Exception):
     def __init__(self, code, msg, *args, **kwargs):
@@ -112,6 +131,20 @@ class TransportRAK7431(Transport):
 
             for cmd in final_commands:
                 send_at_command(ss, cmd)
+
+    @staticmethod
+    def configure_remote(dev, address, dev_eui, serial=0):
+        n = 1
+        for req in dev.read_requests(address):
+            mser = 2*serial+n
+#            cmd = bytes([0x04, 0, mser, 0, 1, n])
+#            log.info(f"Deleting #{n:>2}: {cmd.hex(' ')}")
+#            send_lora_cmd(dev_eui, 129, cmd)
+
+            cmd = bytes([0x03, 0, mser+1, 0, len(req)+1, n, *req])
+            log.info(f"Adding #{n:>2}: {cmd.hex(' ')}")
+            send_lora_cmd(dev_eui, 129, cmd)
+            n += 1
 
     @staticmethod
     def gen_modbus_parser(dev):
@@ -249,10 +282,10 @@ def action_gen_parser(device, transport, args):
     js = transport.gen_modbus_parser(device)
     print(js)
 
-def action_configure(device, transport, args):
+def action_conf_local(device, transport, args):
     transport.configure_polling(args.address, device, args.port)
 
-def action_print_requests(device, transport, args):
+def action_print(device, transport, args):
     n = 1
     for req in device.read_requests(args.address):
         log.info(f"Request #{n:>2}: {req.hex(' ')}")
@@ -260,8 +293,13 @@ def action_print_requests(device, transport, args):
         cmd_add = bytes([0x03, 0, 2+n*2+1, 0, len(req)+1, n, *req])
         n += 1
 
+def action_conf_remote(device, transport, args):
+    transport.configure_remote(device, args.address, args.dev_eui, args.serial)
+
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--debug", action='store_true', default=False,
+            help="Enable debug")
     parser.add_argument("-c", "--config", type=str, default="config-map12e-fw2.json",
             help="Modbus device JSON config path, (default: %(default)s)")
     parser.add_argument("-t", "--transport", type=str, required=True,
@@ -270,19 +308,31 @@ def main():
             )
     actions = parser.add_subparsers(title="Action", required=True)
 
+    act_print_requests = actions.add_parser("print", help="Print read requests")
+    act_print_requests.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
+    act_print_requests.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
+    act_print_requests.set_defaults(func=action_print)
+
     act_gen_parser = actions.add_parser("gen_parser", help="Generate JS for node-red")
     act_gen_parser.set_defaults(func=action_gen_parser)
 
     act_conf = actions.add_parser("configure", help="Configure transport polling")
-    act_conf.set_defaults(func=action_configure)
+    act_conf.set_defaults(func=action_conf_local)
     act_conf.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
     act_conf.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
 
-    act_print_requests = actions.add_parser("print_requests", help="Print read requests")
-    act_print_requests.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
-    act_print_requests.set_defaults(func=action_print_requests)
+    act_conf_remote = actions.add_parser("conf_remote", help="Remotely configure")
+    act_conf_remote.add_argument("-d", "--dev_eui", type=str, required=True, help="Device EUI")
+    act_conf_remote.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
+    act_conf_remote.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
+    act_conf_remote.set_defaults(func=action_conf_remote)
+
+
 
     args = parser.parse_args()
+
+    if args.debug:
+        coloredlogs.set_level(logging.DEBUG)
 
     if args.transport == 'rak7431':
         transport = TransportRAK7431
