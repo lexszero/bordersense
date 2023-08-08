@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging, coloredlogs
+import argparse
 import asyncio
 import json
 import re
@@ -18,7 +19,7 @@ from modbus_device import is_skipped
 log = logging.getLogger()
 coloredlogs.install(
         fmt="%(name)s %(levelname)s: %(message)s",
-        level=logging.DEBUG
+        level=logging.INFO
         )
 
 def chan_value(name):
@@ -57,8 +58,9 @@ def chan_value(name):
     else:
         return 0
 
-def build_map12_datablock():
-    with open('config-map12e-fw2.json', 'r') as f:
+def build_modbus_datablock(config):
+    log.info(f"Loading modbus device profile {config}")
+    with open(config, 'r') as f:
         config = json.load(f)
 
     regs = {}
@@ -96,12 +98,10 @@ def build_map12_datablock():
         log.info(f"Reg 0x{addr:04x}={addr} {name} = {real_val} {fmt} [{' '.join(map(hex, regvals))}]")
         regs[addr] = regvals
     return ModbusSparseDataBlock(regs)
- 
-async def run_async_server():
+
+async def run_async_server(args):
     """Run server."""
-    #datablock = ModbusSequentialDataBlock(0x00, list(range(0, 0xFFFF)))
-    # datablock = ModbusSparseDataBlock({0x00: 0, 0x05: 1})
-    datablock = build_map12_datablock()
+    datablock = build_modbus_datablock(args.config)
     context = ModbusSlaveContext(
             di=datablock, co=datablock, hr=datablock, ir=datablock,
             zero_mode=True
@@ -113,7 +113,7 @@ async def run_async_server():
         context=context,  # Data storage
         framer=ModbusRtuFramer,
         # timeout=1,  # waiting time for request to complete
-        port="/dev/ttyUSB0",  # serial port
+        port=args.port,  # serial port
         # custom_functions=[],  # allow custom handling
         stopbits=2,  # The number of stop bits to use
         bytesize=8,  # The bytesize of the serial messages
@@ -125,6 +125,18 @@ async def run_async_server():
         # strict=True,  # use strict timing, t1.5 for Modbus RTU
         )
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", type=str, default="devices/config-map12e-fw2.json",
+            help="Modbus device JSON config path (default: %(default)s)")
+    parser.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0",
+            help="Serial port (default: %(default)s)")
+    parser.add_argument("-d", "--debug", action='store_true', default=False,
+            help="Enable debug")
+    args = parser.parse_args()
+    if args.debug:
+        coloredlogs.set_level(logging.DEBUG)
+    asyncio.run(run_async_server(args), debug=args.debug)
 
 if __name__ == "__main__":
-    asyncio.run(run_async_server(), debug=True)
+    main()
