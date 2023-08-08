@@ -1,0 +1,5 @@
+__pycache__/
+tmp/
+
+BL_2023_power_grid/
+power_*.geojson
