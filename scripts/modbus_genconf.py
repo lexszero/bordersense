@@ -278,6 +278,20 @@ return msg;
 
 '''
 
+class TransportSDM630Lora(Transport):
+    @staticmethod
+    def gen_modbus_parser(dev: ModbusDevice):
+        fields = []
+        for block in dev.all_blocks:
+            for chan in block.chans:
+                if 'aup_idx' not in chan:
+                    raise RuntimeError(f"Register {chan['address']} is missing aup_idx")
+                fields.append(chan)
+
+        for n, chan in enumerate(sorted(fields, key=lambda x: x['aup_idx'])):
+            fname = sanitize_chan_name(chan['name'])
+            log.info(f"#{n:<} Reg {chan['address']} / {chan.get('aup_idx', '--'):4}:   {fname}")
+
 def action_gen_parser(device, transport, args):
     js = transport.gen_modbus_parser(device)
     print(js)
@@ -303,7 +317,7 @@ def main():
     parser.add_argument("-c", "--config", type=str, default="config-map12e-fw2.json",
             help="Modbus device JSON config path, (default: %(default)s)")
     parser.add_argument("-t", "--transport", type=str, required=True,
-            choices=['rak7431', 'dragino'],
+            choices=['rak7431', 'dragino', 'sdm630'],
             help="LoRa transport type"
             )
     actions = parser.add_subparsers(title="Action", required=True)
@@ -338,6 +352,8 @@ def main():
         transport = TransportRAK7431
     elif args.transport == 'dragino':
         transport = TransportDragino
+    elif args.transport == 'sdm630':
+        transport = TransportSDM630Lora
     else:
         raise RuntimeError("Unsupported transport")
 
