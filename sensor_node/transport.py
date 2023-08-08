@@ -1,24 +1,21 @@
-#!/usr/bin/env python3
 import os
-import logging, coloredlogs, argparse, re
-from typing import Any, List, Dict, Optional
+import logging
+import re
+from typing import List
 
 import serial
 from pexpect_serial import SerialSpawn
 
-from modbus_device import ModbusDevice, sanitize_chan_name
-
 import grpc
 from chirpstack_api import api
 
-log = logging.getLogger('genconf')
-coloredlogs.install(
-        fmt="%(name)s %(levelname)s: %(message)s",
-        level=logging.INFO
-        )
+from .modbus_device import ModbusDevice
 
-CHIRPSTACK_SERVER = 'gw-rpi:8080'
+log = logging.getLogger('transport')
+
+CHIRPSTACK_SERVER = os.environ.get('CHIRPSTACK_SERVER', 'bordersense:8080')
 CHIRPSTACK_API_TOKEN = os.environ.get('CHIRPSTACK_API_TOKEN')
+
 channel = grpc.insecure_channel(CHIRPSTACK_SERVER)
 auth_token = [("authorization", "Bearer %s" % CHIRPSTACK_API_TOKEN)]
 
@@ -32,12 +29,11 @@ def send_lora_cmd(dev_eui, fport, buf):
     req.queue_item.f_port = fport
     return chirpstack_dev_service.Enqueue(req, metadata=auth_token)
 
-
 class ATCommandError(Exception):
     def __init__(self, code, msg, *args, **kwargs):
         self.code = code
         self.msg = msg
-        super().__init__(f'RAK7431 AT command error: {code}:{msg}', *args, **kwargs)
+        super().__init__(f'AT command error: {code}:{msg}', *args, **kwargs)
 
 def send_at_command(ss, cmd):
     log.info(f'Sending {cmd}')
@@ -51,8 +47,10 @@ def send_at_command(ss, cmd):
 
 def js_common():
     return '''
-function convert(signed, scale, errorVals, val) {{
+function convert(signed, scale, errorVals, limit, val) {{
     if (errorVals.includes(val))
+        return undefined;
+    if (limit && val > limit)
         return undefined;
     if (signed)
         val = val<<0;
@@ -60,21 +58,26 @@ function convert(signed, scale, errorVals, val) {{
 }}
 '''
 
+
 class Transport:
     @staticmethod
-    def configure_polling(slave_addr, dev, port="/dev/ttyUSB0"):
+    def configure_local(requests, port="/dev/ttyUSB0"):
         pass
 
     @staticmethod
-    def gen_modbus_parser(dev):
+    def configure_lora(requests, dev_eui, serial=0):
+        pass
+
+    @staticmethod
+    def gen_slave_response_parser(slaves):
         pass
 
 class TransportRAK7431(Transport):
     MAX_COMMANDS = 32
-    MAX_RESPONSE_BYTES = 42
+    MAX_RESPONSE_BYTES = 40
 
     @staticmethod
-    def configure_polling(slave_addr, dev, port="/dev/ttyUSB0"):
+    def configure_local(requests, port="/dev/ttyUSB0"):
         init_commands: List[str] = [
                 'AT+CLASS=C',
                 'AT+PUBLIC=1',
@@ -85,7 +88,7 @@ class TransportRAK7431(Transport):
                 'AT+PARITY=NONE',
                 'AT+DTUMODE=MODBUS',
                 'AT+TRANSPARENT=0',
-                'AT+POLLPERIOD=120',
+                'AT+POLLPERIOD=30',
                 'AT+ENABLEPOLL=0'
                 ]
 
@@ -118,7 +121,7 @@ class TransportRAK7431(Transport):
             for cmd in init_commands:
                 send_at_command(ss, cmd)
 
-            for n, req in enumerate(dev.read_requests(slave_addr), 1):
+            for n, req in enumerate(requests, 1):
                 req = req.hex()
                 cmd = f"AT+ADDPOLL={n}:{req}"
                 try:
@@ -133,9 +136,9 @@ class TransportRAK7431(Transport):
                 send_at_command(ss, cmd)
 
     @staticmethod
-    def configure_remote(dev, address, dev_eui, serial=0):
+    def configure_lora(requests, dev_eui, serial=0):
         n = 1
-        for req in dev.read_requests(address):
+        for req in requests:
             mser = 2*serial+n
 #            cmd = bytes([0x04, 0, mser, 0, 1, n])
 #            log.info(f"Deleting #{n:>2}: {cmd.hex(' ')}")
@@ -147,12 +150,19 @@ class TransportRAK7431(Transport):
             n += 1
 
     @staticmethod
-    def gen_modbus_parser(dev):
+    def gen_slave_response_parser(slaves):
         cases = ''
-        for n, block in enumerate(dev.all_blocks, 1):
-            measurement = ',\n'.join(block.gen_decoder())
-            decoder = re.sub(r'^', ' '*12, measurement, flags=re.MULTILINE).strip()
-            cases += f'''
+        n = 0
+        for slave in slaves:
+            for block in slave.all_blocks:
+                n += 1
+                if len(slaves) > 1:
+                    meas_name = f"'_{slave.address}'"
+                else:
+                    meas_name = "''"
+                measurement = ',\n'.join(block.gen_decoder(meas_name))
+                decoder = re.sub(r'^', ' '*12, measurement, flags=re.MULTILINE).strip()
+                cases += f'''
         case {n}:
             return [{decoder}]
 '''
@@ -178,8 +188,7 @@ if (msg_type != 0x01)
 const task_id = buf[5];
 const tags = {{
     ...msg.payload.deviceInfo.tags,
-    dev_name: dev_name,
-    dev_type: "{dev.config['device_type']}"
+    dev_name: dev_name
 }};
 
 if (fail) {{
@@ -204,7 +213,7 @@ class TransportDragino(Transport):
     MAX_RESPONSE_BYTES = None
 
     @staticmethod
-    def configure_polling(slave_addr, dev, port="/dev/ttyUSB1"):
+    def configure_local(requests, port="/dev/ttyUSB1"):
         init_commands: List[str] = [
                 'AT+RPL=4',
                 'AT+BAUDR=9600',
@@ -228,23 +237,30 @@ class TransportDragino(Transport):
             for cmd in init_commands:
                 send_at_command(ss, cmd)
 
-            for n, req in enumerate(dev.read_requests(slave_addr), 1):
+            n = 1
+            for req in requests:
                 req = req[:-2].hex(' ')
                 cmd = f"AT+COMMAND{n:1X}={req},1"
                 send_at_command(ss, cmd)
                 send_at_command(ss, f"AT+CMDDL{n:1X}=1000")
+                n += 1
 
             for cmd in final_commands:
                 send_at_command(ss, cmd)
             ss.sendline('ATZ')
 
     @staticmethod
-    def gen_modbus_parser(dev):
+    def gen_slave_response_parser(slaves):
         offset = 0
         parts = []
-        for block in dev.all_blocks:
-            parts.append(',\n'.join(block.gen_decoder(offset=offset)))
-            offset += block.size * 2
+        for slave in slaves:
+            if len(slaves) > 1:
+                meas_name = f"'_{slave.address}'"
+            else:
+                meas_name = "''"
+            for block in slave.all_blocks:
+                parts.append(',\n'.join(block.gen_decoder(meas_name, offset=offset)))
+                offset += block.size * 2
     
         measurements = re.sub(r'^', ' '*8, ',\n'.join(parts), flags=re.MULTILINE).strip()
     
@@ -252,8 +268,7 @@ class TransportDragino(Transport):
 const dev_name = msg.tags.dev_name;
 const buf = msg.payload;
 const tags = {{
-    ...msg.tags,
-    dev_type: "{dev.config['device_type']}"
+    ...msg.tags
 }};
 
 {js_common()}
@@ -277,99 +292,3 @@ else {{
 return msg;
 
 '''
-
-class TransportSDM630Lora(Transport):
-    @staticmethod
-    def gen_modbus_parser(dev: ModbusDevice):
-        fields = []
-        for block in dev.all_blocks:
-            for chan in block.chans:
-                if 'aup_idx' not in chan:
-                    raise RuntimeError(f"Register {chan['address']} is missing aup_idx")
-                fields.append(chan)
-
-        for n, chan in enumerate(sorted(fields, key=lambda x: x['aup_idx'])):
-            fname = sanitize_chan_name(chan['name'])
-            log.info(f"#{n:<} Reg {chan['address']} / {chan.get('aup_idx', '--'):4}:   {fname}")
-
-def action_gen_parser(device, transport, args):
-    js = transport.gen_modbus_parser(device)
-    print(js)
-
-def action_conf_local(device, transport, args):
-    transport.configure_polling(args.address, device, args.port)
-
-def action_print(device, transport, args):
-    n = 1
-    for req in device.read_requests(args.address):
-        log.info(f"Request #{n:>2}: {req.hex(' ')}")
-        cmd_del = bytes([0x04, 0, 2+n*2, 0, 1, n])
-        cmd_add = bytes([0x03, 0, 2+n*2+1, 0, len(req)+1, n, *req])
-        n += 1
-
-def action_conf_remote(device, transport, args):
-    transport.configure_remote(device, args.address, args.dev_eui, args.serial)
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--debug", action='store_true', default=False,
-            help="Enable debug")
-    parser.add_argument("-c", "--config", type=str, default="config-map12e-fw2.json",
-            help="Modbus device JSON config path, (default: %(default)s)")
-    parser.add_argument("-t", "--transport", type=str, required=True,
-            choices=['rak7431', 'dragino', 'sdm630'],
-            help="LoRa transport type"
-            )
-    actions = parser.add_subparsers(title="Action", required=True)
-
-    act_print_requests = actions.add_parser("print", help="Print read requests")
-    act_print_requests.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
-    act_print_requests.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
-    act_print_requests.set_defaults(func=action_print)
-
-    act_gen_parser = actions.add_parser("gen_parser", help="Generate JS for node-red")
-    act_gen_parser.set_defaults(func=action_gen_parser)
-
-    act_conf = actions.add_parser("configure", help="Configure transport polling")
-    act_conf.set_defaults(func=action_conf_local)
-    act_conf.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
-    act_conf.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
-
-    act_conf_remote = actions.add_parser("conf_remote", help="Remotely configure")
-    act_conf_remote.add_argument("-d", "--dev_eui", type=str, required=True, help="Device EUI")
-    act_conf_remote.add_argument("-a", "--address", type=lambda s: int(s, 0), required=True, help="Modbus slave address", default=0)
-    act_conf_remote.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
-    act_conf_remote.set_defaults(func=action_conf_remote)
-
-
-
-    args = parser.parse_args()
-
-    if args.debug:
-        coloredlogs.set_level(logging.DEBUG)
-
-    if args.transport == 'rak7431':
-        transport = TransportRAK7431
-    elif args.transport == 'dragino':
-        transport = TransportDragino
-    elif args.transport == 'sdm630':
-        transport = TransportSDM630Lora
-    else:
-        raise RuntimeError("Unsupported transport")
-
-    dev = ModbusDevice(args.config, max_response_regs=20)
-
-    total_regs = 0
-    all_blocks = dev.all_blocks
-    for n, b in enumerate(all_blocks):
-        log.info(f"block #{n} {b.name}: 0x{b.start:04x} - 0x{b.start+b.size:04x}   ({b.size} regs, {b.size*2} bytes)")
-        for cn, chan in enumerate(b.chans):
-            log.info(f"   chan #{cn:>4}   {chan['address']}: {chan['name']:<32} {chan.get('format', ''):<5}")
-        total_regs += b.size
-
-    log.info(f"Total {len(all_blocks)} blocks, {total_regs} regs")
-
-    args.func(dev, transport, args)
-
-if __name__ == '__main__':
-    main()

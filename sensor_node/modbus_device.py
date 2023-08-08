@@ -5,7 +5,8 @@ from typing import Any, List, Dict, Optional
 from pymodbus.register_read_message import ReadInputRegistersRequest, ReadHoldingRegistersRequest
 from pymodbus.factory import ClientDecoder as ModbusClientDecoder
 from pymodbus.transaction import ModbusRtuFramer
-from devtools import debug
+from pymodbus.datastore import ModbusSparseDataBlock, ModbusSlaveContext
+from pymodbus.payload import BinaryPayloadBuilder
 
 log = logging.getLogger('mbdev')
 mb_framer = ModbusRtuFramer(ModbusClientDecoder())
@@ -44,10 +45,48 @@ def get_channel_size(chan) -> int:
     else:
         return fmt_len[fmt]
 
+def emulated_chan_value(name):
+    if 'Irms' in name:
+        return 10
+    elif 'Ipeak' in name:
+        return 15
+    elif 'I' in name:
+        return 12
+    elif 'Frequency' in name:
+        return 50.0
+    elif name == 'Voltage angle L1':
+        return 0
+    elif name == 'Voltage angle L2':
+        return 120
+    elif name == 'Voltage angle L2':
+        return -120
+    elif re.match(r'^Total P\W', name):
+        return 50
+    elif 'P L' in name:
+        return 16.6
+    elif 'Total Q' in name:
+        return 51
+    elif 'Q L' in name:
+        return 17.6
+    elif 'Total S' in name:
+        return 52
+    elif 'S L' in name:
+        return 18.6
+    elif 'Urms' in name:
+        return 230
+    elif 'Upeak' in name:
+        return 232
+    elif 'U L' in name:
+        return 400
+    else:
+        return 0
+
 def sanitize_chan_name(name):
     s = re.sub(r'^Ch \d+\s+', '', name)
     s = re.sub(r'^(.*) (Total|L[1-3])$', r'\2 \1', s)
     s = re.sub(r'\s', '_', s)
+    s = re.sub(r'([PSQ])\+', r'\1_p', s)
+    s = re.sub(r'([PSQ])-', r'\1_n', s)
     s = re.sub(r'-', '_', s)
     return s
 
@@ -56,7 +95,7 @@ def gen_chan_decoder(chan, start_address, buf='buf', offset=0):
     word_order = chan.get('word_order', 'big_endian')
     offset = offset + (int(chan['address'], 16) - start_address) * 2
     ret = ''
-    errvals = []
+    errvals = [0xffff]
     if fmt in ['s16', 'u16']:
         errvals = [0xffff]
         ret = f'({buf}[{offset}] << 8) | {buf}[{offset+1}]'
@@ -79,7 +118,10 @@ def gen_chan_decoder(chan, start_address, buf='buf', offset=0):
         ev = int(chan['error_value'], 16)
         if ev not in errvals:
             errvals.append(ev)
-    ret = f"convert({signed}, {scale}, [{', '.join(map(hex, errvals))}], {ret})"
+    limit = 'undefined'
+    if 'limit' in chan:
+        limit = chan['limit']
+    ret = f"convert({signed}, {scale}, [{', '.join(map(hex, errvals))}], {limit}, {ret})"
     return ret
 
 def format_dict(data, indent=8):
@@ -114,30 +156,25 @@ class RegisterBlock:
 
     def gen_decoder_measurement(self, measurement, chan_list, tags={}, offset=0):
         linesep = f",\n        "
-        m = re.match(r'ch(\d+)_(\w+)', measurement)
-        measurement = 'dev_name'
-        if m:
-            measurement += f' + "_ch{repr(m.group(1))}"'
         lines = []
-        #debug(chan_list)
         for chan_idx in chan_list:
             chan = self.chans[chan_idx]
             log.debug(f'{chan=}')
             lines.append(f"{sanitize_chan_name(chan['name'])}: {gen_chan_decoder(chan, self.start, offset=offset)}")
         fields = linesep.join(lines)
         return f'''{{
-    measurement: {measurement},
+    measurement: dev_name + {measurement},
     fields: {{
         {fields}
     }},
     tags: tags
 }}'''
 
-    def gen_decoder(self, *args, **kwargs):
+    def gen_decoder(self, measurement_prefix, *args, **kwargs):
         if self.desc:
-            return [self.gen_decoder_measurement(measurement, chan_list, *args, **kwargs) for measurement, chan_list in self.desc.items()]
+            return [self.gen_decoder_measurement(measurement_prefix, chan_list, *args, **kwargs) for chan_list in self.desc.values()]
         else:
-            return [self.gen_decoder_measurement(self.name, range(len(self.chans)), *args, **kwargs)]
+            return [self.gen_decoder_measurement(measurement_prefix, range(len(self.chans)), *args, **kwargs)]
 
 
 class ModbusDevice:
@@ -147,10 +184,11 @@ class ModbusDevice:
     input_blocks: List[RegisterBlock]
     holding_blocks: List[RegisterBlock]
 
-    def __init__(self, config_file, max_response_regs=None):
+    def __init__(self, address, config_file, max_response_regs=None):
         with open(config_file, 'r') as f:
             self.config = json.load(f)
     
+        self.address = address
         self.input_regs = {}
         self.holding_regs = {}
         self.input_blocks = []
@@ -200,7 +238,7 @@ class ModbusDevice:
                 s_addr = f'0x{addr:04x}'
 
             size = get_channel_size(chan)
-            if (next_addr >= 0 and addr != next_addr) or (max_response_regs and block.size + size == max_response_regs):
+            if (next_addr >= 0 and addr != next_addr) or (max_response_regs and (block.size + size >= max_response_regs)):
                 blocks.append(block)
                 block_idx += 1
                 if block_idx >= len(block_desc):
@@ -218,6 +256,47 @@ class ModbusDevice:
 
         return blocks
 
-    def read_requests(self, slave_addr):
+    def read_requests(self):
         for b in self.all_blocks:
-            yield b.build_read_request(slave_addr)
+            yield b.build_read_request(self.address)
+
+    def emulated_slave_context(self):
+        regs = {}
+        for chan in self.config['device']['channels']:
+            if is_skipped(chan):
+                continue
+            name = chan['name']
+            addr = chan['address']
+            if isinstance(addr, str):
+                addr = int(addr, 16)
+            fmt = chan['format']
+            scale = chan.get('scale', 1.0)
+            if chan.get('word_order', 'big_endian') == 'little_endian':
+                b = BinaryPayloadBuilder(byteorder='>', wordorder='<')
+            else:
+                b = BinaryPayloadBuilder(byteorder='>', wordorder='>')
+            real_val = emulated_chan_value(name)
+            val = int(real_val/scale)
+            log.info(f"Slave {self.address} reg 0x{addr:04x}/{addr} [{fmt}] {name} = {real_val} = 0x{val:0x}")
+            if fmt == 's16':
+                b.add_16bit_int(val)
+            elif fmt == 'u16':
+                b.add_16bit_uint(val)
+            elif fmt == 's32':
+                b.add_32bit_int(val)
+            elif fmt == 'u32':
+                b.add_32bit_uint(val)
+            elif fmt == 's64':
+                b.add_64bit_int(val)
+            elif fmt == 'u64':
+                b.add_64bit_uint(val)
+            else:
+                raise RuntimeError(f"unsupported fmt in chan {chan['name']}: {fmt}")
+            regvals = b.to_registers()
+            log.info(f"Reg 0x{addr:04x}={addr} {name} = {real_val} {fmt} [{' '.join(map(hex, regvals))}]")
+            regs[addr] = regvals
+
+        datablock = ModbusSparseDataBlock(regs)
+        return ModbusSlaveContext(
+                di=datablock, co=datablock, hr=datablock, ir=datablock,
+                zero_mode=True)

@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+import os, sys
+import logging, coloredlogs, argparse
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from sensor_node import SensorNode
+
+coloredlogs.install(
+        fmt="%(name)s %(levelname)s: %(message)s",
+        level=logging.INFO
+        )
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--debug", action='store_true', default=False,
+            help="Enable debug")
+    parser.add_argument("-c", "--config", type=str, default="config-map12e-fw2.json",
+            help="Sensor node JSON config path, (default: %(default)s)")
+
+    actions = parser.add_subparsers(title="Action", required=True)
+
+    act_print_requests = actions.add_parser("print", help="Print read requests")
+    act_print_requests.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
+    act_print_requests.set_defaults(func=SensorNode.print_reads)
+
+    act_gen_parser = actions.add_parser("gen_parser", help="Generate JS for node-red")
+    act_gen_parser.set_defaults(func=SensorNode.gen_parser)
+
+    act_conf_local = actions.add_parser("conf_local", help="Configure transport via serial")
+    act_conf_local.set_defaults(func=SensorNode.configure_transport_local)
+    act_conf_local.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
+
+    act_conf_remote = actions.add_parser("conf_remote", help="Configure transport via LoRa uplinks")
+    act_conf_remote.add_argument("-d", "--dev_eui", type=str, required=True, help="Device EUI")
+    act_conf_remote.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
+    act_conf_remote.set_defaults(func=SensorNode.configure_transport_lora)
+
+    act_emulate = actions.add_parser("emulate", help="Emulate modbus slaves for testing")
+    act_emulate.set_defaults(func=SensorNode.emulate_modbus)
+    act_emulate.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
+
+    args = parser.parse_args()
+
+    if args.debug:
+        coloredlogs.set_level(logging.DEBUG)
+
+    node = SensorNode(args.config)
+    args.func(node, args)
+
+if __name__ == '__main__':
+    main()

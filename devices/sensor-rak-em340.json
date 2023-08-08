@@ -1,0 +1,10 @@
+{
+  "transport": "rak7431",
+  "poll_period": 60,
+  "modbus_slaves": [
+    {
+      "address": 1,
+      "device_conf": "meter-em340.json"
+    }
+  ]
+}
