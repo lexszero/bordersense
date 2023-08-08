@@ -5,6 +5,7 @@ from typing import Any, List, Dict, Optional
 from pymodbus.register_read_message import ReadInputRegistersRequest, ReadHoldingRegistersRequest
 from pymodbus.factory import ClientDecoder as ModbusClientDecoder
 from pymodbus.transaction import ModbusRtuFramer
+from devtools import debug
 
 log = logging.getLogger('mbdev')
 mb_framer = ModbusRtuFramer(ModbusClientDecoder())
@@ -15,11 +16,11 @@ def is_skipped(chan):
     if chan.get('group') == 'hw_info':
         return True
     return any([re.match(regex, chan['name']) for regex in [
+        r'Ch.*PF',
         r'Ch.*energy',
         r'Ch.*Voltage angle',
         r'.*[Pp]hase angle',
         r'.*THD',
-        r'.*energy',
         r'.*demand',
         r'.*average',
         r'.*I sum',
@@ -113,27 +114,23 @@ class RegisterBlock:
 
     def gen_decoder_measurement(self, measurement, chan_list, tags={}, offset=0):
         linesep = f",\n        "
-        tags = {}
         m = re.match(r'ch(\d+)_(\w+)', measurement)
+        measurement = 'dev_name'
         if m:
-            tags['meas_channel'] = int(m.group(1))
-            tags['meas_type'] = repr(m.group(2))
-        else:
-            tags['meas_type'] = repr(measurement)
+            measurement += f' + "_ch{repr(m.group(1))}"'
         lines = []
+        #debug(chan_list)
         for chan_idx in chan_list:
             chan = self.chans[chan_idx]
+            log.debug(f'{chan=}')
             lines.append(f"{sanitize_chan_name(chan['name'])}: {gen_chan_decoder(chan, self.start, offset=offset)}")
         fields = linesep.join(lines)
         return f'''{{
-    measurement: dev_name + "_{measurement}",
+    measurement: {measurement},
     fields: {{
         {fields}
     }},
-    tags: {{
-        ...tags,
-        {format_dict(tags, indent=8)},
-    }}
+    tags: tags
 }}'''
 
     def gen_decoder(self, *args, **kwargs):
@@ -150,7 +147,7 @@ class ModbusDevice:
     input_blocks: List[RegisterBlock]
     holding_blocks: List[RegisterBlock]
 
-    def __init__(self, config_file, max_response_bytes=None):
+    def __init__(self, config_file, max_response_regs=None):
         with open(config_file, 'r') as f:
             self.config = json.load(f)
     
@@ -171,7 +168,7 @@ class ModbusDevice:
                 self.holding_regs[addr] = chan
 
         log.info(f"Loaded device config, {len(self.holding_regs)} holding, {len(self.input_regs)} input")
-        self.split_into_blocks(max_response_bytes=max_response_bytes)
+        self.split_into_blocks(max_response_regs=max_response_regs)
 
     @property
     def all_blocks(self):
@@ -180,8 +177,13 @@ class ModbusDevice:
     def split_into_blocks(self, *args, **kwargs):
         self.input_blocks = self._split_into_blocks('input', self.input_regs, *args, **kwargs)
         self.holding_blocks = self._split_into_blocks('holding', self.holding_regs, *args, **kwargs)
+    
+#    def _split_into_blocks(self, method, regs, max_response_regs=None):
+#        block_desc = self.config['device'].get(method+'_blocks', [])
+#        blocks = []
+#        for blk in block_desc:
 
-    def _split_into_blocks(self, method, regs, max_response_bytes=None):
+    def _split_into_blocks(self, method, regs, max_response_regs=None):
         block_desc = self.config['device'].get(method+'_blocks', [])
         if not block_desc:
             return []
@@ -198,7 +200,7 @@ class ModbusDevice:
                 s_addr = f'0x{addr:04x}'
 
             size = get_channel_size(chan)
-            if next_addr >= 0 and addr != next_addr:
+            if (next_addr >= 0 and addr != next_addr) or (max_response_regs and block.size + size == max_response_regs):
                 blocks.append(block)
                 block_idx += 1
                 if block_idx >= len(block_desc):

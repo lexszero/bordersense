@@ -66,7 +66,7 @@ class TransportRAK7431(Transport):
                 'AT+PARITY=NONE',
                 'AT+DTUMODE=MODBUS',
                 'AT+TRANSPARENT=0',
-                'AT+POLLPERIOD=300',
+                'AT+POLLPERIOD=120',
                 'AT+ENABLEPOLL=0'
                 ]
 
@@ -173,6 +173,7 @@ class TransportDragino(Transport):
     @staticmethod
     def configure_polling(slave_addr, dev, port="/dev/ttyUSB1"):
         init_commands: List[str] = [
+                'AT+RPL=4',
                 'AT+BAUDR=9600',
                 'AT+PARITY=0',
                 'AT+STOPBIT=2',
@@ -182,7 +183,6 @@ class TransportDragino(Transport):
 
         final_commands = [
                 'AT+DATAUP=1',
-                'ATZ'
                 ]
 
         with serial.Serial(port, baudrate=9600) as port:
@@ -199,10 +199,11 @@ class TransportDragino(Transport):
                 req = req[:-2].hex(' ')
                 cmd = f"AT+COMMAND{n:1X}={req},1"
                 send_at_command(ss, cmd)
-                send_at_command("AT+CMDDL{n:1X}=1000", cmd)
+                send_at_command(ss, f"AT+CMDDL{n:1X}=1000")
 
             for cmd in final_commands:
                 send_at_command(ss, cmd)
+            ss.sendline('ATZ')
 
     @staticmethod
     def gen_modbus_parser(dev):
@@ -255,6 +256,8 @@ def action_print_requests(device, transport, args):
     n = 1
     for req in device.read_requests(args.address):
         log.info(f"Request #{n:>2}: {req.hex(' ')}")
+        cmd_del = bytes([0x04, 0, 2+n*2, 0, 1, n])
+        cmd_add = bytes([0x03, 0, 2+n*2+1, 0, len(req)+1, n, *req])
         n += 1
 
 def main():
@@ -288,14 +291,14 @@ def main():
     else:
         raise RuntimeError("Unsupported transport")
 
-    dev = ModbusDevice(args.config)
+    dev = ModbusDevice(args.config, max_response_regs=20)
 
     total_regs = 0
     all_blocks = dev.all_blocks
     for n, b in enumerate(all_blocks):
         log.info(f"block #{n} {b.name}: 0x{b.start:04x} - 0x{b.start+b.size:04x}   ({b.size} regs, {b.size*2} bytes)")
-        for chan in b.chans:
-            log.info(f"      {chan['address']}: {chan['name']:<32} {chan.get('format', ''):<5}")
+        for cn, chan in enumerate(b.chans):
+            log.info(f"   chan #{cn:>4}   {chan['address']}: {chan['name']:<32} {chan.get('format', ''):<5}")
         total_regs += b.size
 
     log.info(f"Total {len(all_blocks)} blocks, {total_regs} regs")
