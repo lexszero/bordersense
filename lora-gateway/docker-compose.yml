@@ -27,6 +27,8 @@ services:
     restart: unless-stopped
     expose:
       - 1700/udp
+    ports:
+      - 1700/udp
     volumes:
       - ./configuration/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
     depends_on:
@@ -110,11 +112,44 @@ services:
       - data-nodered:/data
       - ./configuration/node-red/settings.js:/data/settings.js
 
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    networks:
+      - public
+      - internal
+    depends_on:
+      - influxdb
+    env_file:
+      - .env
+    environment:
+      - GF_SERVER_DOMAIN=localhost:8080
+      - GF_SERVER_ROOT_URL=https://bl.skookum.cc/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONUMOUS_ORG_NAME="BorderLand"
+      - GF_AUTH_ANONUMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+      - GF_PANELS_ENABLE_ALPHA=true
+    links:
+      - influxdb
+    ports:
+      - "3000:3000"
+    volumes:
+      - data-grafana:/var/lib/grafana
+
   influxdb:
     image: influxdb:latest
     #security_opt:
     #  - no-new-privileges:true
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      INFLUXDB_DB=bordersense
+      INFLUXDB_ADMIN_USER=admin
+      INFLUXDB_ADMIN_PASSWORD=changeme
     ports:
       - "8086:8086"
     volumes:
@@ -157,6 +192,7 @@ volumes:
   data-redis:
   data-influxdb:
   data-nodered:
+  data-grafana:
 
 networks:
   internal:
