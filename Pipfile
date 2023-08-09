@@ -11,6 +11,8 @@ pymodbus = "*"
 coloredlogs = "*"
 pexpect-serial = "*"
 chirpstack-api = "*"
+fastapi = "*"
+uvicorn = "*"
 
 [dev-packages]
 
