@@ -1,2 +1,5 @@
 <!-- grafana plot -->
-<iframe src="{{.Get 0}}" width="100%" height="400" frameborder="0"></iframe>
+<iframe src="{{.Get "url"}}"
+        width="{{if (.Get "width")}}{{.Get "width"}}{{else}}100%{{end}}"
+        height="{{if (.Get "height")}}{{.Get "height"}}{{else}}400{{end}}"
+        frameborder="0"></iframe>

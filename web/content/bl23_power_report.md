@@ -17,6 +17,20 @@ of the power grid and work vehicles. It proved to be extremely useful in
 troubleshooting and fault prevention, as well as time-saving during build and
 strike when locating the vehicles.
 
+
+# Power needs and grid layout
+
+Legend: Stars mark centers of camps, size and color depend on announced power
+need.
+The power grid consists of PDUs (circles) and cables (lines). Color depends on
+capacity of the line/PDU (more red == more thicc).
+
+{{< grafana_plot
+  url="https://bl.skookum.cc/grafana/d-solo/a86f2d75-5d63-45dc-990f-f1eee27aef38/power-grid?orgId=1&from=1691588654969&to=1691610254969&panelId=2"
+  height=1000
+  >}}
+
+
 # Power grid monitoring insights
 
 ## Power zones legend
@@ -44,7 +58,9 @@ _Unaccounted_: The Villa, Muumimaa, The Triangle Of (Threshold and The Port),
 ## Cool graphs
 
 _Hover over the graphs to see measurements at specific time, blue ticks are
-comments about specific events, hover over little triangle mark at the bottom_
+comments about specific events, hover over little triangle mark at the bottom.
+Click and drag to select time period to zoom in, click "Explore" to open the
+plot on a separate page_
 
 ### Power usage during the event
 
@@ -52,7 +68,15 @@ As the power sensors were gradually deployed and moved around, the data we have
 is not covering all areas at all times, but we captured the end of the week in
 full glory of our **peak power usage** at about **150 kW**.
 
-{{< grafana_plot "https://bl.skookum.cc/grafana/d-solo/a86d109c-8e52-47d5-9ef9-a025875ee923/power?orgId=1&var-aggregate_fn=max&from=1690146000000&to=1690750799000&panelId=1" >}}
+{{<grafana_plot url="https://bl.skookum.cc/grafana/d-solo/a86d109c-8e52-47d5-9ef9-a025875ee923/power-report-graphs?orgId=1&var-aggregate_fn=max&var-aggregate_period=5m&var-extra_metrics=Abuze&from=1690146000000&to=1690750799000&panelId=1">}}
+
+[Explore](https://bl.skookum.cc/grafana/d/a86d109c-8e52-47d5-9ef9-a025875ee923/power-report-graphs?orgId=1&var-aggregate_fn=max&var-aggregate_period=5m&var-extra_metrics=Abuze&from=1690146000000&to=1690750799000&viewPanel=1)
+
+### Load per zone
+
+{{<grafana_plot url="https://bl.skookum.cc/grafana/d/bd4b25e9-a7b5-4f48-91c1-68c98f5854bb/power-per-zone?orgId=1&var-extra_metrics=None&from=1690146000000&to=1690750799000&kiosk" height=1000 >}}
+
+[Explore](https://bl.skookum.cc/grafana/d/bd4b25e9-a7b5-4f48-91c1-68c98f5854bb/power-per-zone?orgId=1&from=1690146000000&to=1690750799000)
 
 ### Phase load disbalance
 
@@ -64,6 +88,6 @@ higher load on phase 1 wire, while the other two phases stay underused. We had t
 invent a special Abuze metric and encourage people to use sockets other than the
 first one. Here's the worst area by this parameter:
 
-{{< grafana_plot "https://bl.skookum.cc/grafana/d-solo/a86d109c-8e52-47d5-9ef9-a025875ee923/power?orgId=1&var-aggregate_fn=max&from=1690059600000&to=1690750799000&panelId=2" >}}
+{{<grafana_plot url="https://bl.skookum.cc/grafana/d-solo/bd4b25e9-a7b5-4f48-91c1-68c98f5854bb/power-per-zone?orgId=1&from=1690146000000&to=1690750799000&var-aggregate_fn=max&var-aggregate_period=5m&panelId=3">}}
 
 _TODO: to be continued: maps, vehicle trackers, pics of trench-digging with champagne, yada yada..._
