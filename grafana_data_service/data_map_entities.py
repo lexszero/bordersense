@@ -15,7 +15,8 @@ def camp_power_need() -> Table:
         TableColumn(type='string', text='name'),
         TableColumn(type='number', text='lat'),
         TableColumn(type='number', text='lon'),
-        TableColumn(type='number', text='power')
+        TableColumn(type='number', text='power'),
+        TableColumn(type='string', text='powerLabel')
         ])
 
     mapentities = requests.get('https://placement.freaks.se/api/v1/mapentities').json()
@@ -26,12 +27,19 @@ def camp_power_need() -> Table:
         props = gj['properties']
         poly = shape(gj['geometry'])
         centroid = poly.centroid
-        watts = min(normalize_number(props.get('powerNeed')), 50000)/1000
+        pwr = min(normalize_number(props.get('powerNeed')), 50000)/1000
+        pwrLabel = None
+        if pwr > 0.05:
+            if abs(round(pwr) - pwr) < 0.1:
+                pwrLabel= f'{pwr:.0f}'
+            else:
+                pwrLabel = f'{pwr:.1f}'
         table.rows.append([
             props['name'],
             str(centroid.y),
             str(centroid.x),
-            watts
+            pwr,
+            pwrLabel
             ])
 
     return table
