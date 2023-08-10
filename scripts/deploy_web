@@ -1,4 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+ROOT_DIR="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+pushd "${ROOT_DIR}/web"
 hugo
 rsync -avz public/ skookum:/srv/www/bl.skookum.cc

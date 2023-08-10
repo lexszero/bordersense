@@ -18,7 +18,16 @@ troubleshooting and fault prevention, as well as time-saving during build and
 strike when locating the vehicles.
 
 
-# Power needs and grid layout
+# The Grid
+
+This year the grid consisted of at least **6,186m of cable** (probably more, as
+some smaller ad-hoc 16A lines remained uncharted, and individual cables chunks round
+the lines length up - it could be over **seven kilometers!**), of which
+125A - 490m, 63A - 1,607m, 32A - 2,818m, 16A - 985m, single-phase: 286m
+
+There are a total of at least **87 PDUs**: 125A - 2pcs, 63A - 20pcs, 32A - 44pcs, 16A - 21pcs.
+
+## Grid layout & power needs
 
 Legend: Stars mark centers of camps, size and color depend on announced power
 need.

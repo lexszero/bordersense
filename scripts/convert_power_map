@@ -3,11 +3,15 @@ import logging, coloredlogs
 import geojson
 import itertools
 import re
+import math
+
+from shapely.geometry import shape
+from pyproj import Geod
 
 log = logging.getLogger('convert_map')
 coloredlogs.install(
         fmt="%(name)s %(levelname)s: %(message)s",
-        level=logging.DEBUG
+        level=logging.INFO
         )
 
 
@@ -16,6 +20,8 @@ power_areas = [
         'SOUTH',
         'Barn_and_the_hill'
         ]
+
+geod = Geod(ellps="WGS84")
 
 def load_geojson(name, rename=None, style=None):
     j: geojson.FeatureCollection = geojson.load(open(f"BL_2023_power_grid/{name}.geojson"))
@@ -35,6 +41,38 @@ def load_geojson(name, rename=None, style=None):
 def flatten(l):
     return [item for sublist in l for item in sublist]
 
+def line_length(feat: geojson.LineString):
+    return geod.geometry_length(shape(feat.geometry))
+
+def print_power_stats(all_cables, all_pdus):
+    log.info("")
+    order = ['125', '63', '32', '16', '230', 'unknown']
+    all_total_length = 0
+    log.info("Cable lines:")
+    for cable_type in order:
+        cables = all_cables.get(cable_type, None)
+        if not cables:
+            continue
+        total_length = 0
+        for cable in cables:
+            length = line_length(cable)
+            #length = math.ceil(length/25)*25
+            total_length += length
+            log.debug(f"    {cable.properties.get('Name'):>20}: {length:>4.0f}m")
+        all_total_length += total_length
+        log.info(f"  {cable_type:>3}: {total_length:,.0f}m")
+    log.info(f"Total cable length: {all_total_length:,.0f}m")
+
+    pdu_count = 0
+    log.info("PDUs:")
+    for pdu_type in order:
+        pdus = all_pdus.get(pdu_type, None)
+        if not pdus:
+            continue
+        log.info(f"  PDU {pdu_type}: {len(pdus)}")
+        pdu_count += len(pdus)
+    log.info(f"Total: {pdu_count}")
+
 def update_areas(j):
     result = []
     for feature in j['features']:
@@ -48,9 +86,17 @@ def update_areas(j):
         result.append(feature)
     return geojson.FeatureCollection(result)
 
+cables_misc = {
+        'Main sub E': 63,
+        'Garden Line': 63,
+        'Line 23': 32,
+        'Line 75': 16,
+        }
 
 def update_power_properties(j):
     result = []
+    cables = {}
+    pdus = {}
     for feature in j['features']:
         log.debug(f'Power: {feature}')
         name = feature.properties['Name']
@@ -64,24 +110,33 @@ def update_power_properties(j):
             if m:
                 amps = m.groups(1)[0]
                 if int(amps) == 64:
-                    amps = 63
+                    amps = '63'
                 log.info(f'PDU: {amps}')
                 feature.properties['power_size'] = amps
+                pdus.setdefault(feature.properties['power_size'], []).append(feature)
         if feature.geometry.type == 'LineString':
+            amps = None
             m = re.match(r'(\d+)\s*A?', name)
             if not m:
                 m = re.match(r'(\d+)\s*A?', feature.properties.get('description', ''))
             if m:
                 amps = m.groups(1)[0]
                 if amps == '64':
-                    amps = 63
+                    amps = '63'
                 log.info(f'Line {name}: {amps}')
-                feature.properties['power_size'] = amps
-            elif name == 'Garden Line':
-                feature.properties['power_size'] = 63
+            elif name in cables_misc:
+                amps = str(cables_misc[name])
             else:
-                feature.properties['power_size'] = 'unknown'
+                amps = 'unknown'
+
+            if '1f' in name:
+                amps = '230'
+
+            feature.properties['power_size'] = amps
+            cables.setdefault(amps, []).append(feature)
         result.append(feature)
+
+    print_power_stats(cables, pdus)
     return geojson.FeatureCollection(result)
 
 
