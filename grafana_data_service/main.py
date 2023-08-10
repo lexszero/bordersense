@@ -3,6 +3,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from .grafana import Query, Search
 from .data_map_entities import camp_power_need
+from .data_weather import weather
 
 app = FastAPI()
 
@@ -15,7 +16,8 @@ app.add_middleware(
 )
 
 targets = {
-        'camp_power_need': camp_power_need
+        'camp_power_need': camp_power_need,
+        'weather': weather
         }
 
 @app.get("/")
@@ -32,7 +34,7 @@ def grafana_query(query: Query):
     response = []
     for target in query.targets:
         if target.target in targets:
-            response.append(targets[target.target]())
+            response.append(targets[target.target](target, query.range))
     return response
 
 @app.post("/annotations")

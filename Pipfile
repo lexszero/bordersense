@@ -13,6 +13,7 @@ pexpect-serial = "*"
 chirpstack-api = "*"
 fastapi = "*"
 uvicorn = "*"
+pandas = "*"
 
 [dev-packages]
 

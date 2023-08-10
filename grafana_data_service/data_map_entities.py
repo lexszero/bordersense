@@ -1,6 +1,6 @@
 import json, requests
 from shapely.geometry import shape
-from .grafana import Table, TableColumn
+from .grafana import Table, TableColumn, Target, Range
 
 def normalize_number(x):
     if not x:
@@ -10,7 +10,7 @@ def normalize_number(x):
     else:
         return x
 
-def camp_power_need() -> Table:
+def camp_power_need(target: Target, timerange: Range) -> Table:
     table = Table(columns=[
         TableColumn(type='string', text='name'),
         TableColumn(type='number', text='lat'),

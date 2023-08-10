@@ -1,19 +1,21 @@
-from pydantic import BaseModel
-from typing import Any, Optional, List, Union, Literal
+from pydantic import BaseModel, Field
+from typing import Any, Optional, List, Union, Literal, Tuple
+from datetime import datetime
 
 class Search(BaseModel):
     target: str
 
 
 class RangeRaw(BaseModel):
-    # from: str
-    to: str
+    start: str = Field(..., alias='from')
+    end: str = Field(..., alias='to')
 
 
 class Range(BaseModel):
-    # from: str
-    to: str
+    start: datetime = Field(..., alias='from')
+    end: datetime = Field(..., alias='to')
     raw: RangeRaw
+
 
 
 class Target(BaseModel):
@@ -28,7 +30,7 @@ class Query(BaseModel):
     timezone: str
     panelId: Union[int, str]
     dashboardId: Optional[str] = None
-    range: dict
+    range: Range
     interval: str
     intervalMs: int
     targets: List[Target]
@@ -47,3 +49,7 @@ class Table(BaseModel):
     type: Literal['table'] = 'table'
     columns: List[TableColumn]
     rows: List[List[Any]] = []
+
+class Timeserie(BaseModel):
+    target: str
+    datapoints: List[Tuple[Any, Any]]
