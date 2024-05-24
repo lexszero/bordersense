@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+import logging, coloredlogs, warnings
+import datetime
+import argparse
+import geojson
+import functools
+import re
+import zipfile
+import os
+import requests
+
+log = logging.getLogger('convert_map')
+warnings.simplefilter('ignore')
+
+from fastkml.kml import KML
+from shapely.geometry import shape, Point
+from pyproj import Geod
+
+PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
+PLACEMENT_HOODS_LABELS_URL = 'https://www.theborderland.se/map/data/bl24/labels/neighbourhoods.json'
+PLACEMENT_HOODS_URL = 'https://www.theborderland.se/map/data/bl24/neighbourhoods.geojson'
+
+POWER_KML_URL = 'http://www.google.com/maps/d/kml?forcekml=1&mid=1oS6UFpJMdwnm7UmkaEBRJrC3Mhp80nQ'
+POWER_KML_FOLDERS = [
+        'areas',
+        'NORTH',
+        'SOUTH',
+        'EAST',
+        'new_north',
+        'Barn_and_the_hill'
+        ]
+
+POWER_ITEM_SIZE_ORDER = ['125', '63', '32', '16', '230', 'unknown']
+
+cables_misc = {
+        'Main sub E': 63,
+        'Garden Line': 63,
+        'Line 23': 32,
+        'Line 75': 16,
+        'testline 05': 125,
+        }
+
+geod = Geod(ellps="WGS84")
+
+def geojson_fixup(j, rename=None, style=None):
+    if style:
+        j.style = style
+    for feature in j.features:
+        feature.properties = {k: v for k, v in feature.properties.items() if v is not None}
+        if rename:
+            #feature.properties[rename] = feature.properties['Name']
+            feature['id'] = feature.properties['Name']
+            del(feature.properties['Name'])
+
+    return j
+
+def geojson_load(name, *args, **kwargs):
+    j: geojson.FeatureCollection = geojson.load(open(f"BL_2024_power_grid/{name}.geojson"))
+    del(j.crs)
+    return geojson_fixup(j, *args, **kwargs)
+
+def kml_to_geojson(folder, *args, **kwargs):
+    j = geojson.FeatureCollection([geojson.Feature(geometry=f.geometry, properties={
+        'Name': f.name,
+        'description': f.description
+        }) for f in folder.features()])
+    return geojson_fixup(j, *args, **kwargs)
+
+def get_powermap_kml(kmz_path):
+    if kmz_path:
+        with zipfile.ZipFile(kmz_path) as kmz_file:
+            with kmz_file.open('doc.kml', 'r') as kml_file:
+                return kml_file.read()
+    else:
+        log.info("Fetching power map")
+        return requests.get(POWER_KML_URL).content
+
+@functools.cache
+def kml_folders(kml_doc):
+    kml = KML()
+    kml.from_string(kml_doc)
+    result = {}
+    for folder in next(kml.features()).features():
+        name = str(folder.name).strip().replace(' ', '_')
+        log.debug(f"KML folder {name}")
+        result[name] = folder
+
+    return result
+
+def is_grid_feature(feature):
+    name = feature.properties.get('Name')
+    desc = feature.properties.get('description')
+    if ((name == '1.2ha') or
+        (desc and ('1ha' in desc)) or
+        (name in ['HEX', 'ECLAIRE', 'THE LEMON'])):
+        log.warning(f"not a grid feature: {name} / {desc}")
+        return False
+    return True
+
+def find_power_area(power_areas, item):
+    for area in power_areas.features:
+        if shape(area.geometry).contains(item):
+            return area
+    return None
+
+def find_power_area_name(power_areas, item):
+    if item.type == 'Point':
+        area = find_power_area(power_areas, item)
+        if area:
+            return area.id
+        else:
+            return 'unknown'
+    elif item.type == 'LineString':
+        line_areas = {}
+        for item in item.coords:
+            area_name = 'unknown'
+            area = find_power_area(power_areas, Point(item))
+            if area:
+                area_name = area.id
+            line_areas[area_name] = line_areas.setdefault(area_name, 0) + 1
+        if not line_areas:
+            return None
+        else:
+            return max(line_areas.items(), key=lambda it: it[1])[0]
+
+@functools.cache
+def get_power_areas(kml_doc):
+    folders = kml_folders(kml_doc)
+    j = {
+            'type': 'FeatureCollection',
+            'features': flatten([x.features for x in [
+                kml_to_geojson(folders['areas'], rename='Area'),
+                kml_to_geojson(folders['Roads'], rename='Road')
+                ]])}
+    result = []
+    for feature in j['features']:
+        if feature.geometry.type != 'Polygon':
+            continue
+        log.debug(f'Area: {feature.id}')
+        result.append(feature)
+    return geojson.FeatureCollection(result)
+
+def flatten(l):
+    return [item for sublist in l for item in sublist]
+
+def line_length(feat: geojson.LineString):
+    return geod.geometry_length(shape(feat.geometry))
+
+def print_powermap_stats(power_grid):
+    log.info("")
+    all_cables = {}
+    all_pdus = {}
+    for item in power_grid.features:
+        log.debug(item)
+        if item.geometry.type == 'Point':
+            all_pdus.setdefault(item.properties['power_size'], []).append(item)
+        elif item.geometry.type == 'LineString':
+            all_cables.setdefault(item.properties['power_size'], []).append(item)
+
+    all_total_length = 0
+    log.info("Cable lines:")
+    for cable_type in POWER_ITEM_SIZE_ORDER:
+        cables = all_cables.get(cable_type, None)
+        if not cables:
+            continue
+        total_length = 0
+        for cable in cables:
+            length = line_length(cable)
+            #length = math.ceil(length/25)*25
+            total_length += length
+            log.debug(f"    {cable.properties.get('Name'):>20}: {length:>4.0f}m")
+        all_total_length += total_length
+        log.info(f"  {cable_type:>3}: {total_length:,.0f}m")
+    log.info(f"Total cable length: {all_total_length:,.0f}m")
+
+    pdu_count = 0
+    log.info("PDUs:")
+    for pdu_type in POWER_ITEM_SIZE_ORDER:
+        pdus = all_pdus.get(pdu_type, None)
+        if not pdus:
+            continue
+        log.info(f"  PDU {pdu_type}: {len(pdus)}")
+        pdu_count += len(pdus)
+    log.info(f"Total: {pdu_count}")
+
+def print_powermap_csv(power_grid):
+    log.info("")
+    log.info("CSV cables:")
+    for item in filter(lambda it: it.geometry.type == 'LineString', power_grid.features):
+        props = item.properties
+        length = line_length(item)
+        log.info(f"{props['power_area']};{item.properties['Name']} / {item.properties.get('description', '')};{props['power_size']};{length:.0f}")
+
+    log.info("")
+    log.info("CSV pdus:")
+    pdus = {}
+    for item in filter(lambda it: it.geometry.type == 'Point', power_grid.features):
+        pdus.setdefault(item.properties['power_size'], []).append(item)
+    pdus_line = ';'.join([str(len(pdus.get(power_size, []))) for power_size in POWER_ITEM_SIZE_ORDER])
+    log.info(pdus_line)
+
+@functools.cache
+def get_power_grid(kml_doc):
+    folders = kml_folders(kml_doc)
+    features = flatten([x.features for x in [kml_to_geojson(folders[folder]) for folder in POWER_KML_FOLDERS]])
+    power_areas = get_power_areas(kml_doc)
+
+    result = []
+    for feature in features:
+        #log.debug(f'Power: {feature}')
+        name = feature.properties['Name']
+        desc = feature.properties.get('description')
+        if feature.geometry.type == 'Point':
+            if not is_grid_feature(feature):
+                log.warning(f"skip point {name} / {desc}")
+                continue
+            m = re.match(r'^(\d+)\s?A?', name)
+            if m:
+                amps = m.groups(1)[0]
+                if int(amps) == 64:
+                    amps = '63'
+            else:
+                log.warning(f"can't determine PDU type: {name} / {desc}")
+                amps = 'unknown'
+            feature.properties['power_size'] = amps
+            feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
+            log.debug(f"PDU: {feature.properties['power_size']} ({feature.properties['power_area']})")
+        elif feature.geometry.type == 'LineString':
+            amps = None
+            m = re.match(r'(\d+)\s*A?', name)
+            if not m:
+                m = re.match(r'(\d+)\s*A?', feature.properties.get('description', ''))
+            if m:
+                amps = m.groups(1)[0]
+                if amps == '64':
+                    amps = '63'
+            elif name in cables_misc:
+                amps = str(cables_misc[name])
+            else:
+                amps = 'unknown'
+
+            if '1f' in name:
+                amps = '230'
+
+            feature.properties['power_size'] = amps
+            feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
+            log.debug(f"Line: {feature.properties['power_size']} ({feature.properties['power_area']})")
+        else:
+            log.debug(f"skip {name} / {desc}")
+            continue
+        result.append(feature)
+
+    return geojson.FeatureCollection(result)
+
+def get_power_consumers(power_areas):
+    areas = {'unknown': []}
+    for area in power_areas.features:
+        areas[area.id] = []
+
+    j = requests.get(PLACEMENT_ENTITIES_URL).json()
+    log.info(f"Fetched {len(j)} entities")
+    consumers = []
+    for item in j:
+        if item['isDeleted']:
+            continue
+        gj = geojson.loads(item['geoJson'])
+        name = gj.properties.get('name')
+        if not name:
+            continue
+
+        power = int(gj.properties['powerNeed'])
+        if power == -1:
+            power = 0
+        elif power < 0:
+            log.warning(f"Negative power: '{name}' wants {power} W, fixing up")
+            power = -power
+
+        area = find_power_area(power_areas, shape(gj.geometry).centroid)
+        if not area and power > 0:
+            log.warning(f"Unable to assign power area: '{name}', power: {power} W")
+        area_name = 'unknown'
+        if area:
+            area_name = area.id
+
+        log.debug(f"Entity: {name}, power: {power}, area: {area_name}")
+
+        gj.properties['powerNeed'] = power
+        gj.properties['powerArea'] = area_name
+
+        areas[area_name].append(gj)
+        consumers.append(gj)
+
+    return geojson.FeatureCollection(consumers), areas
+
+def print_consumer_stats(consumers, areas):
+    log.info("")
+    log.info("Power need per power area:")
+    area_total_power = {}
+    all_areas_total_power = 0
+    for area_name, camps in areas.items():
+        total_power = sum([it.properties['powerNeed'] for it in camps])
+        if total_power == 0:
+            continue
+        log.info(f"\t{area_name}: {total_power/1000} kW")
+        area_total_power[area_name] = total_power
+
+    all_areas_total_power = sum(area_total_power.values())
+
+    log.info("")
+    log.info(f"\tPNS+PNE+PNW: {(area_total_power['PNS']+area_total_power['PNE']+area_total_power['PNW'])/1000} kW")
+    log.info(f"\tPNW+PNE: {(area_total_power['PNW']+area_total_power['PNE'])/1000} kW")
+    log.info(f"\tPSW+PSS: {(area_total_power['PSW']+area_total_power['PSS'])/1000} kW")
+    log.info(f"\tPSC+PSE: {(area_total_power['PSC']+area_total_power['PSE'])/1000} kW")
+    log.info("")
+    log.info(f"All areas total power: {all_areas_total_power/1000} kW")
+
+    log.info("")
+    log.info("Top 5 consumers per area:")
+    for area_name, camps in sorted(areas.items(), key=lambda it: area_total_power.get(it[0], 0), reverse=True):
+        if not area_total_power.get(area_name):
+            continue
+        log.info(f"\t{area_name} ({area_total_power[area_name]/1000} kW):")
+        for camp in sorted(camps, key=lambda x: x.properties['powerNeed'], reverse=True)[:5]:
+            power = camp.properties['powerNeed']
+            percentage = power/area_total_power[area_name]*100
+            log.info(f"\t\t'{camp.properties['name']}': {power/1000} kW / {percentage:.0f}%")
+
+    camps_sorted = sorted(filter(lambda it: it.properties['powerNeed'] > 0, consumers.features),
+                          key=lambda it: it.properties['powerNeed'], reverse=True)
+    log.info("")
+    log.info("Top 20 consumers:")
+    for item in camps_sorted[:20]:
+        log.info(f"\t{item.properties['name']} ({item.properties['powerArea']}) - {item.properties['powerNeed']/1000} kW")
+
+
+def do_powermap_geojson(args):
+    kml_doc = get_powermap_kml(args.kmz_path)
+    geojson.dump(get_power_areas(kml_doc), open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
+    power_grid = get_power_grid(kml_doc)
+    print_powermap_stats(power_grid)
+    geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+
+def do_powermap_csv(args):
+    kml_doc = get_powermap_kml(args.kmz_path)
+    power_grid = get_power_grid(kml_doc)
+    print_powermap_csv(power_grid)
+
+def do_update_placement(args):
+    kml_doc = get_powermap_kml(args.kmz_path)
+    consumers, areas = get_power_consumers(get_power_areas(kml_doc))
+    print_consumer_stats(consumers, areas)
+    geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
+
+def do_full_report(args):
+    kml_doc = get_powermap_kml(args.kmz_path)
+    power_areas = get_power_areas(kml_doc)
+
+    consumers, areas = get_power_consumers(power_areas)
+    print_consumer_stats(consumers, areas)
+
+    log.info("")
+    power_grid = get_power_grid(kml_doc)
+    print_powermap_stats(power_grid)
+    print_powermap_csv(power_grid)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--report", action='store_true', default=False,
+                        help="Simplify output as text report")
+    parser.add_argument("-d", "--debug", action='store_true', default=False,
+                        help="Enable debug")
+    parser.add_argument("-o", "--output-dir", type=str, default="./map",
+                                 help="Output directory")
+    parser.add_argument("-k", "--kmz_path", type=str, default=None,
+                                 help="KMZ file exported from googlemaps")
+    actions = parser.add_subparsers(title="Action", required=True)
+
+    act_powermap_geojson = actions.add_parser("powermap_geojson",
+        help="Convert powermap to GeoJSON")
+    act_powermap_geojson.set_defaults(func=do_powermap_geojson)
+
+    act_powermap_csv = actions.add_parser("powermap_csv",
+        help="Generate CSV lists of cables and PDUs")
+    act_powermap_csv.set_defaults(func=do_powermap_csv)
+
+    act_update_placement = actions.add_parser("update_placement",
+        help="Update placement entities")
+    act_update_placement.set_defaults(func=do_update_placement)
+
+    act_full_report = actions.add_parser("full_report",
+        help="Generate full report")
+    act_full_report.set_defaults(func=do_full_report)
+    args = parser.parse_args()
+
+    if args.report:
+        logging.basicConfig(
+                format="%(message)s",
+                level=logging.INFO
+                )
+        log.info(f"Generated at {datetime.datetime.utcnow()} (UTC)")
+    else:
+        coloredlogs.install(
+                fmt="%(name)s %(levelname)s: %(message)s",
+                level=logging.INFO
+                )
+    if args.debug:
+        coloredlogs.set_level(logging.DEBUG)
+
+    try:
+        os.mkdir(args.output_dir, mode=0o755)
+        log.info(f"Created output directory {args.output_dir}")
+    except FileExistsError: pass
+
+    args.func(args)
+
+if __name__ == '__main__':
+    main()

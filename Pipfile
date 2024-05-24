@@ -14,6 +14,9 @@ chirpstack-api = "*"
 fastapi = "*"
 uvicorn = "*"
 pandas = "*"
+fastkml = "*"
+shapely = "*"
+pyproj = "*"
 
 [dev-packages]
 
