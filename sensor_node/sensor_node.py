@@ -69,13 +69,13 @@ class SensorNode:
         requests = []
         for slave in self.modbus_slaves:
             requests += slave.read_requests()
-        self.transport.configure_polling(requests, args.port)
+        self.transport.configure_local(requests, args.port)
 
     def configure_transport_lora(self, args):
         requests = []
         for slave in self.modbus_slaves:
             requests += slave.read_requests()
-        self.transport.configure_remote(requests, args.dev_eui, args.serial)
+        self.transport.configure_lora(requests, args.dev_eui, args.serial)
 
     def emulate_modbus(self, args):
         slaves = {}

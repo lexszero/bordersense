@@ -250,6 +250,23 @@ class TransportDragino(Transport):
             ss.sendline('ATZ')
 
     @staticmethod
+    def configure_lora(requests, dev_eui, serial=0):
+        n = 1
+        for req in requests:
+#            cmd = bytes([0x04, 0, mser, 0, 1, n])
+#            log.info(f"Deleting #{n:>2}: {cmd.hex(' ')}")
+#            send_lora_cmd(dev_eui, 129, cmd)
+            req = req[:-2]
+            cmd = bytes([0xAF, n, 0x01, len(req), *req, 0x01])
+            log.info(f"Command #{n:>2}: {cmd.hex(' ')}")
+            send_lora_cmd(dev_eui, 1, cmd)
+            cmd = bytes([0xAF, n, 0x02, 3, 0x00, 0x00, 0x00, 0x01])
+            log.info(f"Datacut #{n:>2}: {cmd.hex(' ')}")
+            send_lora_cmd(dev_eui, 1, cmd)
+            n += 1
+
+
+    @staticmethod
     def gen_slave_response_parser(slaves):
         offset = 0
         parts = []
