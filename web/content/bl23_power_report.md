@@ -2,9 +2,10 @@
 title = "Borderland 2023 Power report"
 date = "2023-08-09"
 author = "LexsZero"
+Toc = true
 +++
 
-# Overview
+## Overview
 
 
 This year's electric power were supplied primarily from the Swedish electrical grid
@@ -18,7 +19,7 @@ troubleshooting and fault prevention, as well as time-saving during build and
 strike when locating the vehicles.
 
 
-# The Grid
+## The Grid
 
 This year the grid consisted of at least **6,186m of cable** (probably more, as
 some smaller ad-hoc 16A lines remained uncharted, and individual cables chunks round
@@ -27,7 +28,10 @@ the lines length up - it could be over **seven kilometers!**), of which
 
 There are a total of at least **87 PDUs**: 125A - 2pcs, 63A - 20pcs, 32A - 44pcs, 16A - 21pcs.
 
-## Grid layout & power needs
+### Grid layout & power needs
+
+To see the overall layout of Borderland, please check the official [Placement
+Map](https://www.theborderland.se/map)
 
 Legend: Stars mark centers of camps, size and color depend on announced power
 need.
@@ -40,9 +44,10 @@ capacity of the line/PDU (more red == more thicc).
   >}}
 
 
-# Power grid monitoring insights
+## Power grid monitoring
 
-## Power zones legend
+Different areas were supplied by a separate main lines, which were individually
+monitored:
 
 * North Field: Highlands NorthWest and NorthEast, all Slices (Top, Center and Broken),
     Dee, Farflung Fringe, Silence Peak
@@ -55,7 +60,7 @@ capacity of the line/PDU (more red == more thicc).
 _Unaccounted_: The Villa, Muumimaa, The Triangle Of (Threshold and The Port),
     Hidden Meadow - either running on generators or low load.
 
-## Total energy consumption by zones
+### Total energy consumption by zones
 
 * North Field: **5,515 kWh**
 * South Field: **4,252 kWh**
