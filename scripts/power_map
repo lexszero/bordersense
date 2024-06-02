@@ -17,6 +17,7 @@ from shapely.geometry import shape, Point
 from pyproj import Geod
 
 PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
+#PLACEMENT_ENTITIES_URL = 'https://web.archive.org/web/20240506201312/https://placement.freaks.se/api/v1/mapentities'
 PLACEMENT_HOODS_LABELS_URL = 'https://www.theborderland.se/map/data/bl24/labels/neighbourhoods.json'
 PLACEMENT_HOODS_URL = 'https://www.theborderland.se/map/data/bl24/neighbourhoods.geojson'
 
@@ -31,6 +32,15 @@ POWER_KML_FOLDERS = [
         ]
 
 POWER_ITEM_SIZE_ORDER = ['125', '63', '32', '16', '230', 'unknown']
+
+POWER_SUMMARIES = [
+        ['PNS', 'PNE', 'PNW'],
+        ['PNW', 'PNE'],
+        ['PNS'],
+        ['PSW', 'PSS'],
+        ['PE'],
+        ['PSC', 'PSE']
+        ]
 
 cables_misc = {
         'Main sub E': 63,
@@ -268,12 +278,16 @@ def get_power_consumers(power_areas):
         if not name:
             continue
 
-        power = int(gj.properties['powerNeed'])
+        log.debug(gj.properties)
+        power = int(gj.properties.get('powerNeed', 0) or 0)
         if power == -1:
             power = 0
         elif power < 0:
             log.warning(f"Negative power: '{name}' wants {power} W, fixing up")
             power = -power
+        elif power > 100000:
+            log.warning(f"Unrealisticly high power need: '{name}' wants {power} W, ignoring")
+            power = 0
 
         area = find_power_area(power_areas, shape(gj.geometry).centroid)
         if not area and power > 0:
@@ -297,40 +311,47 @@ def print_consumer_stats(consumers, areas):
     log.info("Power need per power area:")
     area_total_power = {}
     all_areas_total_power = 0
+    log.info("")
+    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW")
+    log.info("\t------------------------------------")
     for area_name, camps in areas.items():
         total_power = sum([it.properties['powerNeed'] for it in camps])
         if total_power == 0:
             continue
-        log.info(f"\t{area_name}: {total_power/1000} kW")
+        log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}")
         area_total_power[area_name] = total_power
 
     all_areas_total_power = sum(area_total_power.values())
 
+    log.info("\t------------------------------------")
+    log.info("\tFeed lines")
+    log.info("\t------------------------------------")
+    for areas_list in POWER_SUMMARIES:
+        label = '+'.join(areas_list)
+        power = 0
+        for item in areas_list:
+            power += area_total_power[item]
+        log.info(f"\t{label:>12} {power/1000:7.0f} {power/1000/3:7.0f} {power/1000/6:7.0f}")
     log.info("")
-    log.info(f"\tPNS+PNE+PNW: {(area_total_power['PNS']+area_total_power['PNE']+area_total_power['PNW'])/1000} kW")
-    log.info(f"\tPNW+PNE: {(area_total_power['PNW']+area_total_power['PNE'])/1000} kW")
-    log.info(f"\tPSW+PSS: {(area_total_power['PSW']+area_total_power['PSS'])/1000} kW")
-    log.info(f"\tPSC+PSE: {(area_total_power['PSC']+area_total_power['PSE'])/1000} kW")
-    log.info("")
-    log.info(f"All areas total power: {all_areas_total_power/1000} kW")
+    log.info(f"All areas total power: {all_areas_total_power/1000:.0f} kW")
 
     log.info("")
     log.info("Top 5 consumers per area:")
     for area_name, camps in sorted(areas.items(), key=lambda it: area_total_power.get(it[0], 0), reverse=True):
         if not area_total_power.get(area_name):
             continue
-        log.info(f"\t{area_name} ({area_total_power[area_name]/1000} kW):")
+        log.info(f"\t{area_name} ({area_total_power[area_name]/1000:.0f} kW):")
         for camp in sorted(camps, key=lambda x: x.properties['powerNeed'], reverse=True)[:5]:
             power = camp.properties['powerNeed']
             percentage = power/area_total_power[area_name]*100
-            log.info(f"\t\t'{camp.properties['name']}': {power/1000} kW / {percentage:.0f}%")
+            log.info(f"\t\t'{camp.properties['name']}': {power/1000:.0f} kW / {percentage:.0f}%")
 
     camps_sorted = sorted(filter(lambda it: it.properties['powerNeed'] > 0, consumers.features),
                           key=lambda it: it.properties['powerNeed'], reverse=True)
     log.info("")
     log.info("Top 20 consumers:")
     for item in camps_sorted[:20]:
-        log.info(f"\t{item.properties['name']} ({item.properties['powerArea']}) - {item.properties['powerNeed']/1000} kW")
+        log.info(f"\t{item.properties['name']} ({item.properties['powerArea']}) - {item.properties['powerNeed']/1000:.0f} kW")
 
 
 def do_powermap_geojson(args):
