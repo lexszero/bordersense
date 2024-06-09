@@ -30,7 +30,7 @@ POWER_KML_FOLDERS = [
         'NORTH',
         'SOUTH',
         'EAST',
-        'new_north',
+        'Treshold',
         'Barn_and_the_hill'
         ]
 
