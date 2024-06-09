@@ -62,7 +62,7 @@ GRID_STYLE = {
         'marker-size': 5,
         'marker-color': '#FF0000'
         },
-        }
+    }
 
 POWER_SUMMARIES = [
         ['PNS', 'PNE', 'PNW'],
@@ -195,12 +195,26 @@ def get_power_areas(kml_doc):
     return geojson.FeatureCollection(result)
 
 def power_areas_pretty_totals(power_areas):
+    total_area = None
+    total_power = 0
     for area in power_areas.features:
-        total_power = area.properties['total_power']
-        area.properties['total_power_kw'] = ceil(total_power/1000)
-        area.properties['total_power_kw_div3'] = ceil(total_power/3/1000)
-        area.properties['total_power_kw_div6'] = ceil(total_power/6/1000)
+        if area.id == '8kV Pole and Transformer':
+            total_area = area
+            continue
+        area_power = area.properties['total_power']
+        if area.id != 'PX1':
+            total_power += area_power
+        area.properties['total_power_kw'] = ceil(area_power/1000)
+        area.properties['total_power_kw_div3'] = ceil(area_power/3/1000)
+        area.properties['total_power_kw_div6'] = ceil(area_power/6/1000)
         del(area.properties['total_power'])
+
+    if total_area:
+        total_area.properties['total_power_kw'] = ceil(total_power/1000)
+        total_area.properties['total_power_kw_div3'] = ceil(total_power/3/1000)
+        total_area.properties['total_power_kw_div6'] = ceil(total_power/6/1000)
+        del(total_area.properties['total_power'])
+
     return power_areas
 
 def flatten(l):
