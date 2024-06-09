@@ -8,6 +8,7 @@ import re
 import zipfile
 import os
 import requests
+from math import ceil
 
 log = logging.getLogger('convert_map')
 warnings.simplefilter('ignore')
@@ -15,9 +16,11 @@ warnings.simplefilter('ignore')
 from fastkml.kml import KML
 from shapely.geometry import shape, Point
 from pyproj import Geod
+import matplotlib as mpl
 
 PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
 #PLACEMENT_ENTITIES_URL = 'https://web.archive.org/web/20240506201312/https://placement.freaks.se/api/v1/mapentities'
+PLACEMENT_ROADS_URL = 'https://www.theborderland.se/map/data/bl24/roads_and_distances.geojson'
 PLACEMENT_HOODS_LABELS_URL = 'https://www.theborderland.se/map/data/bl24/labels/neighbourhoods.json'
 PLACEMENT_HOODS_URL = 'https://www.theborderland.se/map/data/bl24/neighbourhoods.geojson'
 
@@ -33,6 +36,34 @@ POWER_KML_FOLDERS = [
 
 POWER_ITEM_SIZE_ORDER = ['125', '63', '32', '16', '230', 'unknown']
 
+GRID_STYLE = {
+    '125': {
+        'stroke-width': 5,
+        'marker-size': 5,
+        },
+    '63': {
+        'stroke-width': 4,
+        'marker-size': 4,
+        },
+    '32': {
+        'stroke-width': 3,
+        'marker-size': 3,
+        },
+    '16': {
+        'stroke-width': 2,
+        'marker-size': 2,
+        },
+    '230': {
+        'stroke-width': 1,
+        'marker-size': 1,
+        },
+    'unknown': {
+        'stroke-width': 5,
+        'marker-size': 5,
+        'marker-color': '#FF0000'
+        },
+        }
+
 POWER_SUMMARIES = [
         ['PNS', 'PNE', 'PNW'],
         ['PNW', 'PNE'],
@@ -42,7 +73,7 @@ POWER_SUMMARIES = [
         ['PSC', 'PSE']
         ]
 
-cables_misc = {
+GRID_CABLES_MISC = {
         'Main sub E': 63,
         'Garden Line': 63,
         'Line 23': 32,
@@ -50,7 +81,18 @@ cables_misc = {
         'testline 05': 125,
         }
 
+GRID_PDUS_MISC = {
+        'Generator 35-40kva': 63,
+        'Generator, 35kva': 63,
+        'Transformator': 125
+        }
+
 geod = Geod(ellps="WGS84")
+
+POWER_COLORMAP = mpl.colormaps['inferno']
+POWER_COLORNORM= mpl.colors.Normalize(vmin=1, vmax=10000)
+def powerneed_color(power):
+    return '#'+bytes(POWER_COLORMAP(POWER_COLORNORM(power), bytes=True))[:3].hex()
 
 def geojson_fixup(j, rename=None, style=None):
     if style:
@@ -147,8 +189,19 @@ def get_power_areas(kml_doc):
         if feature.geometry.type != 'Polygon':
             continue
         log.debug(f'Area: {feature.id}')
+        feature.properties['name'] = feature.id
+        feature.properties['total_power'] = 0
         result.append(feature)
     return geojson.FeatureCollection(result)
+
+def power_areas_pretty_totals(power_areas):
+    for area in power_areas.features:
+        total_power = area.properties['total_power']
+        area.properties['total_power_kw'] = ceil(total_power/1000)
+        area.properties['total_power_kw_div3'] = ceil(total_power/3/1000)
+        area.properties['total_power_kw_div6'] = ceil(total_power/6/1000)
+        del(area.properties['total_power'])
+    return power_areas
 
 def flatten(l):
     return [item for sublist in l for item in sublist]
@@ -221,22 +274,25 @@ def get_power_grid(kml_doc):
         name = feature.properties['Name']
         desc = feature.properties.get('description')
         if feature.geometry.type == 'Point':
+            amps = 'unknown'
             if not is_grid_feature(feature):
                 log.warning(f"skip point {name} / {desc}")
                 continue
             m = re.match(r'^(\d+)\s?A?', name)
             if m:
                 amps = m.groups(1)[0]
-                if int(amps) == 64:
+                if amps == '64':
                     amps = '63'
+            elif name in GRID_PDUS_MISC:
+                amps = str(GRID_PDUS_MISC[name])
             else:
                 log.warning(f"can't determine PDU type: {name} / {desc}")
-                amps = 'unknown'
             feature.properties['power_size'] = amps
             feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
+            feature.properties['marker-size'] = GRID_STYLE[amps]['marker-size']
             log.debug(f"PDU: {feature.properties['power_size']} ({feature.properties['power_area']})")
         elif feature.geometry.type == 'LineString':
-            amps = None
+            amps = 'unknown'
             m = re.match(r'(\d+)\s*A?', name)
             if not m:
                 m = re.match(r'(\d+)\s*A?', feature.properties.get('description', ''))
@@ -244,16 +300,17 @@ def get_power_grid(kml_doc):
                 amps = m.groups(1)[0]
                 if amps == '64':
                     amps = '63'
-            elif name in cables_misc:
-                amps = str(cables_misc[name])
+            elif name in GRID_CABLES_MISC:
+                amps = str(GRID_CABLES_MISC[name])
             else:
-                amps = 'unknown'
+                log.warning(f"can't determine cable type: {name} / {desc}")
 
             if '1f' in name:
                 amps = '230'
 
             feature.properties['power_size'] = amps
             feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
+            feature.properties['stroke-width'] = GRID_STYLE[amps]['stroke-width']
             log.debug(f"Line: {feature.properties['power_size']} ({feature.properties['power_area']})")
         else:
             log.debug(f"skip {name} / {desc}")
@@ -295,12 +352,13 @@ def get_power_consumers(power_areas):
         area_name = 'unknown'
         if area:
             area_name = area.id
+            area.properties['total_power'] += power
 
         log.debug(f"Entity: {name}, power: {power}, area: {area_name}")
 
         gj.properties['powerNeed'] = power
         gj.properties['powerArea'] = area_name
-
+        gj.properties['fill'] = powerneed_color(power)
         areas[area_name].append(gj)
         consumers.append(gj)
 
@@ -356,7 +414,6 @@ def print_consumer_stats(consumers, areas):
 
 def do_powermap_geojson(args):
     kml_doc = get_powermap_kml(args.kmz_path)
-    geojson.dump(get_power_areas(kml_doc), open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     power_grid = get_power_grid(kml_doc)
     print_powermap_stats(power_grid)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
@@ -368,9 +425,19 @@ def do_powermap_csv(args):
 
 def do_update_placement(args):
     kml_doc = get_powermap_kml(args.kmz_path)
-    consumers, areas = get_power_consumers(get_power_areas(kml_doc))
+    power_areas = get_power_areas(kml_doc)
+    consumers, areas = get_power_consumers(power_areas)
     print_consumer_stats(consumers, areas)
+    power_areas_pretty_totals(power_areas)
+    geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
+
+    hoods = geojson.loads(requests.get(PLACEMENT_HOODS_URL).content)
+    hoods_labels = geojson.loads(requests.get(PLACEMENT_HOODS_LABELS_URL).content)
+    hoods.features += hoods_labels.features
+    roads = geojson.loads(requests.get(PLACEMENT_ROADS_URL).content)
+    hoods.features += [it for it in roads.features if it.properties.get('type') not in ['oktocamp', 'publicplease']]
+    geojson.dump(hoods, open(args.output_dir+'/neighbourhoods.geojson', 'w'), indent=2)
 
 def do_full_report(args):
     kml_doc = get_powermap_kml(args.kmz_path)
@@ -383,6 +450,11 @@ def do_full_report(args):
     power_grid = get_power_grid(kml_doc)
     print_powermap_stats(power_grid)
     print_powermap_csv(power_grid)
+
+    power_areas_pretty_totals(power_areas)
+    geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
+    geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+    geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
 
 def main():
     parser = argparse.ArgumentParser()

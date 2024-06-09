@@ -17,6 +17,7 @@ pandas = "*"
 fastkml = "*"
 shapely = "*"
 pyproj = "*"
+matplotlib = "*"
 
 [dev-packages]
 
