@@ -87,6 +87,11 @@ GRID_PDUS_MISC = {
         'Transformator': 125
         }
 
+IGNORE_ENTITIES = [
+        'Offlimit',
+        'The Void'
+        ]
+
 geod = Geod(ellps="WGS84")
 
 POWER_COLORMAP = mpl.colormaps['inferno']
@@ -361,18 +366,24 @@ def get_power_consumers(power_areas):
             power = 0
 
         area = find_power_area(power_areas, shape(gj.geometry).centroid)
-        if not area and power > 0:
-            log.warning(f"Unable to assign power area: '{name}', power: {power} W")
         area_name = 'unknown'
         if area:
             area_name = area.id
             area.properties['total_power'] += power
+        else:
+            if power > 0:
+                log.warning(f"Unable to assign power area: '{name}', power: {power} W")
+            elif name in IGNORE_ENTITIES:
+                continue
 
         log.debug(f"Entity: {name}, power: {power}, area: {area_name}")
 
         gj.properties['powerNeed'] = power
         gj.properties['powerArea'] = area_name
-        gj.properties['fill'] = powerneed_color(power)
+        if area_name == 'unknown' and power > 0:
+            gj.properties['fill'] = '#00ffff'
+        else:
+            gj.properties['fill'] = powerneed_color(power)
         areas[area_name].append(gj)
         consumers.append(gj)
 
