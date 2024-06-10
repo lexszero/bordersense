@@ -34,7 +34,7 @@ POWER_KML_FOLDERS = [
         'Barn_and_the_hill'
         ]
 
-POWER_ITEM_SIZE_ORDER = ['125', '63', '32', '16', '230', 'unknown']
+POWER_ITEM_SIZE_ORDER = ['125', '63', '32', '16', '1f', 'unknown']
 
 GRID_STYLE = {
     '125': {
@@ -53,7 +53,7 @@ GRID_STYLE = {
         'stroke-width': 2,
         'marker-size': 2,
         },
-    '230': {
+    '1f': {
         'stroke-width': 1,
         'marker-size': 1,
         },
@@ -125,8 +125,12 @@ def kml_to_geojson(folder, *args, **kwargs):
 
 def get_powermap_kml(kmz_path):
     if kmz_path:
-        with zipfile.ZipFile(kmz_path) as kmz_file:
-            with kmz_file.open('doc.kml', 'r') as kml_file:
+        try:
+            with zipfile.ZipFile(kmz_path) as kmz_file:
+                with kmz_file.open('doc.kml', 'r') as kml_file:
+                    return kml_file.read()
+        except zipfile.BadZipFile:
+            with open(kmz_path, 'r') as kml_file:
                 return kml_file.read()
     else:
         log.info("Fetching power map")
@@ -144,13 +148,26 @@ def kml_folders(kml_doc):
 
     return result
 
+def power_item_order(item):
+    return POWER_ITEM_SIZE_ORDER.index(item.properties.get('power_size', 'unknown'))
+
+def power_item_desc(item):
+    if not item:
+        return None
+    name = item.properties.get('Name', '')
+    desc = item.properties.get('description', '')
+    if desc:
+        return f"{name} / {desc}"
+    else:
+        return name
+
 def is_grid_feature(feature):
     name = feature.properties.get('Name')
     desc = feature.properties.get('description')
     if ((name == '1.2ha') or
         (desc and ('1ha' in desc)) or
         (name in ['HEX', 'ECLAIRE', 'THE LEMON'])):
-        log.warning(f"not a grid feature: {name} / {desc}")
+        log.warning(f"not a grid feature: {power_item_desc(feature)}")
         return False
     return True
 
@@ -271,7 +288,7 @@ def print_powermap_csv(power_grid):
     for item in filter(lambda it: it.geometry.type == 'LineString', power_grid.features):
         props = item.properties
         length = line_length(item)
-        log.info(f"{props['power_area']};{item.properties['Name']} / {item.properties.get('description', '')};{props['power_size']};{length:.0f}")
+        log.info(f"{props['power_area']};{power_item_desc(item)};{props['power_size']};{length:.0f}")
 
     log.info("")
     log.info("CSV pdus:")
@@ -291,11 +308,10 @@ def get_power_grid(kml_doc):
     for feature in features:
         #log.debug(f'Power: {feature}')
         name = feature.properties['Name']
-        desc = feature.properties.get('description')
         if feature.geometry.type == 'Point':
             amps = 'unknown'
             if not is_grid_feature(feature):
-                log.warning(f"skip point {name} / {desc}")
+                log.warning(f"skip point {power_item_desc(feature)}")
                 continue
             m = re.match(r'^(\d+)\s?A?', name)
             if m:
@@ -305,7 +321,8 @@ def get_power_grid(kml_doc):
             elif name in GRID_PDUS_MISC:
                 amps = str(GRID_PDUS_MISC[name])
             else:
-                log.warning(f"can't determine PDU type: {name} / {desc}")
+                log.warning(f"can't determine PDU type: {power_item_desc(feature)}")
+
             feature.properties['power_size'] = amps
             feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
             feature.properties['marker-size'] = GRID_STYLE[amps]['marker-size']
@@ -319,20 +336,22 @@ def get_power_grid(kml_doc):
                 amps = m.groups(1)[0]
                 if amps == '64':
                     amps = '63'
+            elif '1f' in name:
+                amps = '1f'
             elif name in GRID_CABLES_MISC:
                 amps = str(GRID_CABLES_MISC[name])
             else:
-                log.warning(f"can't determine cable type: {name} / {desc}")
+                log.warning(f"can't determine cable type: {power_item_desc(feature)}")
 
-            if '1f' in name:
-                amps = '230'
+            if amps == '230':
+                amps = '1f'
 
             feature.properties['power_size'] = amps
             feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
             feature.properties['stroke-width'] = GRID_STYLE[amps]['stroke-width']
             log.debug(f"Line: {feature.properties['power_size']} ({feature.properties['power_area']})")
         else:
-            log.debug(f"skip {name} / {desc}")
+            log.debug(f"skip {power_item_desc(feature)}")
             continue
         result.append(feature)
 
