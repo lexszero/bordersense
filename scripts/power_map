@@ -8,7 +8,7 @@ import re
 import zipfile
 import os
 import requests
-from math import ceil
+from math import ceil, inf
 
 log = logging.getLogger('convert_map')
 warnings.simplefilter('ignore')
@@ -71,6 +71,10 @@ POWER_SUMMARIES = [
         ['PSW', 'PSS'],
         ['PE'],
         ['PSC', 'PSE']
+        ]
+
+POWER_AREAS_FROM_TRAFO = [
+        'PSC', 'PNS', 'PSE', 'PNE', 'PNW', 'The Villa', 'PSS', 'PSW', 'PE'
         ]
 
 GRID_CABLES_MISC = {
@@ -224,7 +228,7 @@ def power_areas_pretty_totals(power_areas):
             total_area = area
             continue
         area_power = area.properties['total_power']
-        if area.id != 'PX1':
+        if area.id in POWER_AREAS_FROM_TRAFO:
             total_power += area_power
         area.properties['total_power_kw'] = ceil(area_power/1000)
         area.properties['total_power_kw_div3'] = ceil(area_power/3/1000)
@@ -388,7 +392,7 @@ def get_power_consumers(power_areas):
         area_name = 'unknown'
         if area:
             area_name = area.id
-            area.properties['total_power'] += power
+            #area.properties['total_power'] += power
         else:
             if power > 0:
                 log.warning(f"Unable to assign power area: '{name}', power: {power} W")
@@ -405,6 +409,12 @@ def get_power_consumers(power_areas):
             gj.properties['fill'] = powerneed_color(power)
         areas[area_name].append(gj)
         consumers.append(gj)
+
+    for area in power_areas.features:
+        area_shape = shape(area.geometry)
+        for item in consumers:
+            if area_shape.contains(shape(item.geometry).centroid):
+                area.properties['total_power'] += item.properties['powerNeed']
 
     return geojson.FeatureCollection(consumers), areas
 
