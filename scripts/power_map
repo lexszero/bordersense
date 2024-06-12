@@ -8,6 +8,7 @@ import re
 import zipfile
 import os
 import requests
+import json
 from math import ceil, inf
 
 log = logging.getLogger('convert_map')
@@ -242,6 +243,22 @@ def power_areas_pretty_totals(power_areas):
         del(total_area.properties['total_power'])
 
     return power_areas
+
+def power_areas_to_list(power_areas):
+    result = []
+    for area in power_areas.features:
+        if not area.properties['total_power_kw']:
+            continue
+        point = shape(area.geometry).centroid.coords[0]
+        result.append({
+            'id': area.properties['name'],
+            'lon': point[0],
+            'lat': point[1],
+            'total_power_kw': area.properties['total_power_kw'],
+            'total_power_kw_div3': area.properties['total_power_kw_div3'],
+            'total_power_kw_div6': area.properties['total_power_kw_div6'],
+            })
+    return result
 
 def flatten(l):
     return [item for sublist in l for item in sublist]
@@ -509,6 +526,8 @@ def do_full_report(args):
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
+
+    json.dump(power_areas_to_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
 
 def main():
     parser = argparse.ArgumentParser()
