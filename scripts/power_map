@@ -65,6 +65,11 @@ GRID_STYLE = {
         },
     }
 
+ENTITY_STYLE_NOISY = {
+        'marker-color': '#f2495c',
+        'marker-size': 3
+        }
+
 POWER_SUMMARIES = [
         ['PNS', 'PNE', 'PNW'],
         ['PNW', 'PNE'],
@@ -244,7 +249,7 @@ def power_areas_pretty_totals(power_areas):
 
     return power_areas
 
-def power_areas_to_list(power_areas):
+def gen_power_areas_list(power_areas):
     result = []
     for area in power_areas.features:
         if not area.properties['total_power_kw']:
@@ -435,6 +440,23 @@ def get_power_consumers(power_areas):
 
     return geojson.FeatureCollection(consumers), areas
 
+def add_consumer_markers(consumers):
+    markers = []
+    for item in consumers.features:
+        if item.geometry.type != 'Polygon':
+            continue
+        point = shape(item.geometry).centroid
+        if int(item.properties.get('amplifiedSound', 0)) >= 999:
+            markers.append(geojson.Feature(
+                geometry=point,
+                properties={
+                    'name': '[Sound] ' + item.properties['name'],
+                    **ENTITY_STYLE_NOISY
+                    }
+                ))
+    for item in markers:
+        consumers.features.append(item)
+
 def print_consumer_stats(consumers, areas):
     log.info("")
     log.info("Power need per power area:")
@@ -524,10 +546,12 @@ def do_full_report(args):
 
     power_areas_pretty_totals(power_areas)
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
+    json.dump(gen_power_areas_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+
+    add_consumer_markers(consumers)
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
 
-    json.dump(power_areas_to_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
 
 def main():
     parser = argparse.ArgumentParser()
