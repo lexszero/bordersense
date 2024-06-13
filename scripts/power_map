@@ -6,7 +6,7 @@ import geojson
 import functools
 import re
 import zipfile
-import os
+import os, sys
 import requests
 import json
 from math import ceil, inf
@@ -308,21 +308,34 @@ def print_powermap_stats(power_grid):
         pdu_count += len(pdus)
     log.info(f"Total: {pdu_count}")
 
-def print_powermap_csv(power_grid):
+def gen_powermap_csv(power_grid, output_dir=None):
     log.info("")
-    log.info("CSV cables:")
+    log.info("Generating grid CSV")
+    if output_dir:
+        csv = open(output_dir+"/power_grid_cables.csv", "w")
+    else:
+        log.info("")
+        log.info("Cables:")
+        csv = sys.stdout
+
     for item in filter(lambda it: it.geometry.type == 'LineString', power_grid.features):
         props = item.properties
         length = line_length(item)
-        log.info(f"{props['power_area']};{power_item_desc(item)};{props['power_size']};{length:.0f}")
+        csv.write(f"{props['power_area']};{power_item_desc(item)};{props['power_size']};{length:.0f}\n")
 
-    log.info("")
-    log.info("CSV pdus:")
+    if output_dir:
+        csv.close()
+        csv = open(output_dir+"/power_grid_pdus.csv", "w")
+    else:
+        log.info("")
+        log.info("pdus:")
+        csv = sys.stdout
+
     pdus = {}
     for item in filter(lambda it: it.geometry.type == 'Point', power_grid.features):
         pdus.setdefault(item.properties['power_size'], []).append(item)
     pdus_line = ';'.join([str(len(pdus.get(power_size, []))) for power_size in POWER_ITEM_SIZE_ORDER])
-    log.info(pdus_line)
+    csv.write(pdus_line + "\n")
 
 @functools.cache
 def get_power_grid(kml_doc):
@@ -514,7 +527,7 @@ def do_powermap_geojson(args):
 def do_powermap_csv(args):
     kml_doc = get_powermap_kml(args.kmz_path)
     power_grid = get_power_grid(kml_doc)
-    print_powermap_csv(power_grid)
+    gen_powermap_csv(power_grid)
 
 def do_update_placement(args):
     kml_doc = get_powermap_kml(args.kmz_path)
@@ -542,12 +555,12 @@ def do_full_report(args):
     log.info("")
     power_grid = get_power_grid(kml_doc)
     print_powermap_stats(power_grid)
-    print_powermap_csv(power_grid)
 
     power_areas_pretty_totals(power_areas)
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     json.dump(gen_power_areas_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+    gen_powermap_csv(power_grid, args.output_dir)
 
     add_consumer_markers(consumers)
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
