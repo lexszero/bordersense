@@ -15,8 +15,9 @@ log = logging.getLogger('convert_map')
 warnings.simplefilter('ignore')
 
 from fastkml.kml import KML
-from shapely.geometry import shape, Point
-from pyproj import Geod
+from shapely.geometry import shape, Point, LineString
+from shapely.ops import transform as coord_transform
+import pyproj
 import matplotlib as mpl
 
 PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
@@ -102,7 +103,19 @@ IGNORE_ENTITIES = [
         'The Void'
         ]
 
-geod = Geod(ellps="WGS84")
+geod = pyproj.Geod(ellps="WGS84")
+local_azimuthal_projection = f"+proj=aeqd +R=6371000 +units=m +lat_0=57.62377 +lon_0=14.92715"
+wgs84_to_aeqd = functools.partial(
+    pyproj.transform,
+    pyproj.Proj('+proj=longlat +datum=WGS84 +no_defs'),
+    pyproj.Proj(local_azimuthal_projection),
+)
+
+aeqd_to_wgs84 = functools.partial(
+    pyproj.transform,
+    pyproj.Proj(local_azimuthal_projection),
+    pyproj.Proj('+proj=longlat +datum=WGS84 +no_defs'),
+)
 
 POWER_COLORMAP = mpl.colormaps['inferno']
 POWER_COLORNORM= mpl.colors.Normalize(vmin=1, vmax=10000)
@@ -207,6 +220,16 @@ def find_power_area_name(power_areas, item):
         else:
             return max(line_areas.items(), key=lambda it: it[1])[0]
 
+def find_nearest(needle, haystack):
+    best_dist = +inf
+    best = None
+    for item in haystack:
+        dist = needle.distance(shape(item.geometry))
+        if dist < best_dist:
+            best_dist = dist
+            best = item
+    return best
+
 @functools.cache
 def get_power_areas(kml_doc):
     folders = kml_folders(kml_doc)
@@ -262,6 +285,34 @@ def gen_power_areas_list(power_areas):
             'total_power_kw': area.properties['total_power_kw'],
             'total_power_kw_div3': area.properties['total_power_kw_div3'],
             'total_power_kw_div6': area.properties['total_power_kw_div6'],
+            })
+    return result
+
+def gen_grid_coverage(power_grid):
+    result = []
+    for item in power_grid.features:
+        if item.geometry.type != 'Point':
+            continue
+        p = shape(item.geometry)
+        poly = coord_transform(aeqd_to_wgs84,
+                coord_transform(wgs84_to_aeqd, p).buffer(50, quad_segs=8))
+        result.append(geojson.Feature(
+            geometry=poly,
+            properties={
+                'name': item.properties.get('Name')
+                }))
+    return geojson.FeatureCollection(result)
+
+def gen_grid_pdus_list(power_grid):
+    result = []
+    for item in power_grid.features:
+        if item.geometry.type != 'Point':
+            continue
+        p = shape(item.geometry).coords[0]
+        result.append({
+            'name': item.properties.get('Name'),
+            'lon': p[0],
+            'lat': p[1],
             })
     return result
 
@@ -470,6 +521,25 @@ def add_consumer_markers(consumers):
     for item in markers:
         consumers.features.append(item)
 
+def check_consumer_coverage(consumers, power_grid):
+    pdus = [x for x in power_grid.features if x.geometry.type == 'Point']
+    for item in consumers.features:
+        if not item.properties['powerNeed']:
+            continue
+        name = item.properties['name']
+        p_item = shape(item.geometry)
+        pdu = find_nearest(p_item, pdus)
+        if not pdu:
+            log.warning(f"Unable to find nearest PDU for '{name}'")
+        p_pdu = shape(pdu.geometry)
+        distance = coord_transform(wgs84_to_aeqd, p_item).distance(
+                coord_transform(wgs84_to_aeqd, p_pdu))
+        if distance > 50:
+            log.warning(f"Nearest PDU is too far ({distance:.0f}m) for '{name}'")
+            item.properties['fill'] = '#ff0000'
+        item.properties['powerDistance'] = round(distance)
+
+
 def print_consumer_stats(consumers, areas):
     log.info("")
     log.info("Power need per power area:")
@@ -548,18 +618,21 @@ def do_update_placement(args):
 def do_full_report(args):
     kml_doc = get_powermap_kml(args.kmz_path)
     power_areas = get_power_areas(kml_doc)
+    power_grid = get_power_grid(kml_doc)
 
     consumers, areas = get_power_consumers(power_areas)
+    check_consumer_coverage(consumers, power_grid)
     print_consumer_stats(consumers, areas)
 
     log.info("")
-    power_grid = get_power_grid(kml_doc)
     print_powermap_stats(power_grid)
 
     power_areas_pretty_totals(power_areas)
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     json.dump(gen_power_areas_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+    geojson.dump(gen_grid_coverage(power_grid), open(args.output_dir+'/power_coverage.geojson', 'w'), indent=2)
+    json.dump(gen_grid_pdus_list(power_grid), open(args.output_dir+'/power_pdus.json', 'w'), indent=2)
     gen_powermap_csv(power_grid, args.output_dir)
 
     add_consumer_markers(consumers)
