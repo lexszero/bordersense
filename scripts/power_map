@@ -560,18 +560,19 @@ def print_consumer_stats(consumers, areas):
     area_total_power = {}
     all_areas_total_power = 0
     log.info("")
-    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW")
-    log.info("\t------------------------------------")
+    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW    people  W/person")
+    log.info("\t--------------------------------------------------------")
     for area_name, camps in areas.items():
         total_power = sum([it.properties['powerNeed'] for it in camps])
+        total_population = sum([int(it.properties['nrOfPeople'] or 0) for it in camps])
         if total_power == 0:
             continue
-        log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}")
+        log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}  {total_population:8}  {total_power/total_population:.0f}")
         area_total_power[area_name] = total_power
 
     all_areas_total_power = sum(area_total_power.values())
 
-    log.info("\t------------------------------------")
+    log.info("\t--------------------------------------------------------")
     log.info("\tFeed lines")
     log.info("\t------------------------------------")
     for areas_list in POWER_SUMMARIES:
