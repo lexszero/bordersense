@@ -3,7 +3,7 @@ import logging, coloredlogs, warnings
 import datetime
 import argparse
 import geojson
-import functools
+import functools, copy
 import re
 import zipfile
 import os, sys
@@ -20,13 +20,16 @@ from shapely.ops import transform as coord_transform
 import pyproj
 import matplotlib as mpl
 
-PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
+# BL'23 data:
 #PLACEMENT_ENTITIES_URL = 'https://web.archive.org/web/20240506201312/https://placement.freaks.se/api/v1/mapentities'
+#POWER_KML_URL = 'https://www.google.com/maps/d/kml?forcekml=1&mid=1zD_Jj58_9Lq29tYEz6X6zSc2Ag2NSP0'
+
+PLACEMENT_ENTITIES_URL = 'https://placement.freaks.se/api/v1/mapentities'
+POWER_KML_URL = 'http://www.google.com/maps/d/kml?forcekml=1&mid=1oS6UFpJMdwnm7UmkaEBRJrC3Mhp80nQ'
 PLACEMENT_ROADS_URL = 'https://www.theborderland.se/map/data/bl24/roads_and_distances.geojson'
 PLACEMENT_HOODS_LABELS_URL = 'https://www.theborderland.se/map/data/bl24/labels/neighbourhoods.json'
 PLACEMENT_HOODS_URL = 'https://www.theborderland.se/map/data/bl24/neighbourhoods.geojson'
 
-POWER_KML_URL = 'http://www.google.com/maps/d/kml?forcekml=1&mid=1oS6UFpJMdwnm7UmkaEBRJrC3Mhp80nQ'
 POWER_KML_FOLDERS = [
         'areas',
         'NORTH',
@@ -447,6 +450,17 @@ def get_power_grid(kml_doc):
 
     return geojson.FeatureCollection(result)
 
+def simplify_power_grid(power_grid):
+    result = []
+    for item in power_grid.features:
+        if power_item_order(item) > 2:
+             continue
+        feature = copy.deepcopy(item)
+        if feature.geometry.type == 'Point':
+            feature.properties['marker-size'] *= 5
+        result.append(feature)
+    return geojson.FeatureCollection(result)
+
 def get_power_consumers(power_areas):
     areas = {'unknown': []}
     for area in power_areas.features:
@@ -510,7 +524,7 @@ def add_consumer_markers(consumers):
         if item.geometry.type != 'Polygon':
             continue
         point = shape(item.geometry).centroid
-        if int(item.properties.get('amplifiedSound', 0)) >= 999:
+        if int(item.properties.get('amplifiedSound', 0) or 0) >= 999:
             markers.append(geojson.Feature(
                 geometry=point,
                 properties={
@@ -580,11 +594,14 @@ def print_consumer_stats(consumers, areas):
             percentage = power/area_total_power[area_name]*100
             log.info(f"\t\t'{camp.properties['name']}': {power/1000:.0f} kW / {percentage:.0f}%")
 
-    camps_sorted = sorted(filter(lambda it: it.properties['powerNeed'] > 0, consumers.features),
-                          key=lambda it: it.properties['powerNeed'], reverse=True)
+    camps_powered = list(sorted(
+        filter(lambda it: it.properties['powerNeed'] > 0, consumers.features),
+        key=lambda it: it.properties['powerNeed'], reverse=True))
+
+    camps_high_usage = list(filter(lambda it: it.properties['powerNeed'] >= 3700, camps_powered))
     log.info("")
-    log.info("Top 20 consumers:")
-    for item in camps_sorted[:20]:
+    log.info(f"Camps using >3700W - {len(camps_high_usage)} out of {len(camps_powered)}:")
+    for item in camps_high_usage:
         log.info(f"\t{item.properties['name']} ({item.properties['powerArea']}) - {item.properties['powerNeed']/1000:.0f} kW")
 
 
@@ -620,17 +637,20 @@ def do_full_report(args):
     power_areas = get_power_areas(kml_doc)
     power_grid = get_power_grid(kml_doc)
 
-    consumers, areas = get_power_consumers(power_areas)
-    check_consumer_coverage(consumers, power_grid)
-    print_consumer_stats(consumers, areas)
+    print_powermap_stats(power_grid)
 
     log.info("")
-    print_powermap_stats(power_grid)
+    consumers, areas = get_power_consumers(power_areas)
+    check_consumer_coverage(consumers, power_grid)
+
+    log.info("")
+    print_consumer_stats(consumers, areas)
 
     power_areas_pretty_totals(power_areas)
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     json.dump(gen_power_areas_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
+    geojson.dump(simplify_power_grid(power_grid), open(args.output_dir+'/power_grid_simplified.geojson', 'w'), indent=2)
     geojson.dump(gen_grid_coverage(power_grid), open(args.output_dir+'/power_coverage.geojson', 'w'), indent=2)
     json.dump(gen_grid_pdus_list(power_grid), open(args.output_dir+'/power_pdus.json', 'w'), indent=2)
     gen_powermap_csv(power_grid, args.output_dir)
