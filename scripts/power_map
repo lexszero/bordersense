@@ -456,8 +456,6 @@ def simplify_power_grid(power_grid):
         if power_item_order(item) > 2:
              continue
         feature = copy.deepcopy(item)
-        if feature.geometry.type == 'Point':
-            feature.properties['marker-size'] *= 5
         result.append(feature)
     return geojson.FeatureCollection(result)
 
@@ -539,7 +537,7 @@ def gen_consumer_markers(consumers):
                 properties={
                     'name': item.properties['name'],
                     'marker-size': sqrt(nrOfPeople)*2,
-                    'marker-color': powerneed_color(item.properties['powerNeed'])
+                    'marker-color': item.properties['fill']
                     }
                 ))
     return geojson.FeatureCollection(markers)
@@ -563,23 +561,39 @@ def gen_consumer_list(consumers):
     return result
 
 def check_consumer_coverage(consumers, power_grid):
-    pdus = [x for x in power_grid.features if x.geometry.type == 'Point']
+    pdus = []
+    for item in power_grid.features:
+        if item.geometry.type != 'Point':
+            continue
+        item.properties['power_consumers_num'] = 0
+        item.properties['power_consumers_kw'] = 0
+        pdus.append((item, coord_transform(wgs84_to_aeqd, shape(item.geometry))))
+
     for item in consumers.features:
         if not item.properties['powerNeed']:
             continue
         name = item.properties['name']
-        p_item = shape(item.geometry)
-        pdu = find_nearest(p_item, pdus)
-        if not pdu:
-            log.warning(f"Unable to find nearest PDU for '{name}'")
-        p_pdu = shape(pdu.geometry)
-        distance = coord_transform(wgs84_to_aeqd, p_item).distance(
-                coord_transform(wgs84_to_aeqd, p_pdu))
-        if distance > 50:
-            log.warning(f"Nearest PDU is too far ({distance:.0f}m) for '{name}'")
-            item.properties['fill'] = '#ff0000'
-        item.properties['powerDistance'] = round(distance)
+        p_item = coord_transform(wgs84_to_aeqd, shape(item.geometry).centroid)
 
+        best_distance = inf
+        item.properties['powerNrPDUs'] = 0
+        for pdu, p_pdu in pdus:
+            distance = p_item.distance(p_pdu)
+            if distance < best_distance:
+                best_distance = distance
+            if distance > 50:
+                continue
+            item.properties['powerNrPDUs'] += 1
+            pdu.properties['power_consumers_num'] += 1
+            pdu.properties['power_consumers_kw'] += item.properties['powerNeed']
+
+        if best_distance > 50:
+            log.warning(f"Nearest PDU is too far ({best_distance:.0f}m) for '{name}'")
+            item.properties['fill'] = '#ff0000'
+        item.properties['powerDistance'] = int(best_distance)
+
+    for pdu, _ in pdus:
+        pdu.properties['power_consumers_kw'] = int(pdu.properties['power_consumers_kw']/1000)
 
 def print_consumer_stats(consumers, areas):
     log.info("")
