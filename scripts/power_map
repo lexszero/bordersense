@@ -122,8 +122,11 @@ aeqd_to_wgs84 = functools.partial(
 
 POWER_COLORMAP = mpl.colormaps['inferno']
 POWER_COLORNORM= mpl.colors.Normalize(vmin=500, vmax=7400)
+POWER_COVERAGE_COLORNORM= mpl.colors.Normalize(vmin=0, vmax=5)
 def powerneed_color(power):
     return '#'+bytes(POWER_COLORMAP(POWER_COLORNORM(power), bytes=True))[:3].hex()
+def coverage_color(nr_pdus):
+    return '#'+bytes(POWER_COLORMAP(1-POWER_COVERAGE_COLORNORM(nr_pdus), bytes=True))[:3].hex()
 
 def geojson_fixup(j, rename=None, style=None):
     if style:
@@ -501,10 +504,8 @@ def get_power_consumers(power_areas):
 
         gj.properties['powerNeed'] = power
         gj.properties['powerArea'] = area_name
-        if area_name == 'unknown' and power > 0:
-            gj.properties['fill'] = '#00ffff'
-        else:
-            gj.properties['fill'] = powerneed_color(power)
+        for k in ['color', 'nrOfVechiles', 'additionalSqm', 'contactInfo', 'supressWarnings']:
+            del(gj.properties[k])
         areas[area_name].append(gj)
         consumers.append(gj)
 
@@ -537,7 +538,7 @@ def gen_consumer_markers(consumers):
                 properties={
                     'name': item.properties['name'],
                     'marker-size': sqrt(nrOfPeople)*2,
-                    'marker-color': item.properties['fill']
+                    'marker-color': powerneed_color(item.properties['powerNeed'])
                     }
                 ))
     return geojson.FeatureCollection(markers)
@@ -560,6 +561,21 @@ def gen_consumer_list(consumers):
             })
     return result
 
+def gen_consumer_simplified(consumers):
+    result = []
+    for item in consumers.features:
+        feature = copy.deepcopy(item)
+        if 'powerNrPDUs' in feature.properties:
+            del(feature.properties['powerNrPDUs'])
+        if 'powerDistance' in feature.properties:
+            del(feature.properties['powerDistance'])
+        if feature.properties['powerArea'] == 'unknown' and feature.properties['powerNeed'] > 0:
+            feature.properties['fill'] = '#00ffff'
+        else:
+            feature.properties['fill'] = powerneed_color(item.properties['powerNeed'])
+        result.append(feature)
+    return geojson.FeatureCollection(result)
+
 def check_consumer_coverage(consumers, power_grid):
     pdus = []
     for item in power_grid.features:
@@ -571,6 +587,7 @@ def check_consumer_coverage(consumers, power_grid):
 
     for item in consumers.features:
         if not item.properties['powerNeed']:
+            item.properties['fill'] = coverage_color(10)
             continue
         name = item.properties['name']
         p_item = coord_transform(wgs84_to_aeqd, shape(item.geometry).centroid)
@@ -590,7 +607,9 @@ def check_consumer_coverage(consumers, power_grid):
         if best_distance > 50:
             log.warning(f"Nearest PDU is too far ({best_distance:.0f}m) for '{name}'")
             item.properties['fill'] = '#ff0000'
+
         item.properties['powerDistance'] = int(best_distance)
+        item.properties['fill'] = coverage_color(item.properties['powerNrPDUs'])
 
     for pdu, _ in pdus:
         pdu.properties['power_consumers_kw'] = int(pdu.properties['power_consumers_kw']/1000)
@@ -699,6 +718,7 @@ def do_full_report(args):
 
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
     json.dump(gen_consumer_list(consumers), open(args.output_dir+'/entities.json', 'w'), indent=2)
+    geojson.dump(gen_consumer_simplified(consumers), open(args.output_dir+'/entities_simplified.geojson', 'w'), indent=2)
     geojson.dump(gen_consumer_markers(consumers), open(args.output_dir+'/entities_markers.geojson', 'w'), indent=2)
     #geojson.dump(consumers, open(args.output_dir+'/entities_markers.geojson', 'w'), indent=2)
 
