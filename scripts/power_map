@@ -504,7 +504,7 @@ def get_power_consumers(power_areas):
 
         gj.properties['powerNeed'] = power
         gj.properties['powerArea'] = area_name
-        for k in ['color', 'nrOfVechiles', 'additionalSqm', 'contactInfo', 'supressWarnings']:
+        for k in ['color', 'nrOfVechiles', 'additionalSqm', 'supressWarnings']:
             del(gj.properties[k])
         areas[area_name].append(gj)
         consumers.append(gj)
