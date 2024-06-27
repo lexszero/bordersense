@@ -9,7 +9,7 @@ import zipfile
 import os, sys
 import requests
 import json
-from math import ceil, inf
+from math import ceil, inf, sqrt
 
 log = logging.getLogger('convert_map')
 warnings.simplefilter('ignore')
@@ -121,7 +121,7 @@ aeqd_to_wgs84 = functools.partial(
 )
 
 POWER_COLORMAP = mpl.colormaps['inferno']
-POWER_COLORNORM= mpl.colors.Normalize(vmin=1, vmax=10000)
+POWER_COLORNORM= mpl.colors.Normalize(vmin=500, vmax=7400)
 def powerneed_color(power):
     return '#'+bytes(POWER_COLORMAP(POWER_COLORNORM(power), bytes=True))[:3].hex()
 
@@ -518,22 +518,49 @@ def get_power_consumers(power_areas):
 
     return geojson.FeatureCollection(consumers), areas
 
-def add_consumer_markers(consumers):
+def gen_consumer_markers(consumers):
     markers = []
     for item in consumers.features:
         if item.geometry.type != 'Polygon':
             continue
         point = shape(item.geometry).centroid
-        if int(item.properties.get('amplifiedSound', 0) or 0) >= 999:
+        nrOfPeople = int(item.properties['nrOfPeople'] or 0)
+#        if int(item.properties.get('amplifiedSound', 0) or 0) >= 999:
+#            markers.append(geojson.Feature(
+#                geometry=point,
+#                properties={
+#                    'name': '[Sound] ' + item.properties['name'],
+#                    **ENTITY_STYLE_NOISY
+#                    }
+#                ))
+        if nrOfPeople > 0:
             markers.append(geojson.Feature(
                 geometry=point,
                 properties={
-                    'name': '[Sound] ' + item.properties['name'],
-                    **ENTITY_STYLE_NOISY
+                    'name': item.properties['name'],
+                    'marker-size': sqrt(nrOfPeople)*2,
+                    'marker-color': powerneed_color(item.properties['powerNeed'])
                     }
                 ))
-    for item in markers:
-        consumers.features.append(item)
+    return geojson.FeatureCollection(markers)
+
+def gen_consumer_list(consumers):
+    result = []
+    for item in consumers.features:
+        if item.geometry.type != 'Polygon':
+            continue
+        if not item.properties['powerNeed']:
+            continue
+        point = shape(item.geometry).centroid.coords[0]
+        result.append({
+            'id': item.properties['name'],
+            'lon': point[0],
+            'lat': point[1],
+            'powerNeed': item.properties['powerNeed'],
+            'nrOfPeople': int(item.properties['nrOfPeople'] or 0),
+            'amplifiedSound': int(item.properties['amplifiedSound'] or 0)
+            })
+    return result
 
 def check_consumer_coverage(consumers, power_grid):
     pdus = [x for x in power_grid.features if x.geometry.type == 'Point']
@@ -657,8 +684,9 @@ def do_full_report(args):
     gen_powermap_csv(power_grid, args.output_dir)
 
     geojson.dump(consumers, open(args.output_dir+'/entities.geojson', 'w'), indent=2)
-    add_consumer_markers(consumers)
-    geojson.dump(consumers, open(args.output_dir+'/entities_markers.geojson', 'w'), indent=2)
+    json.dump(gen_consumer_list(consumers), open(args.output_dir+'/entities.json', 'w'), indent=2)
+    geojson.dump(gen_consumer_markers(consumers), open(args.output_dir+'/entities_markers.geojson', 'w'), indent=2)
+    #geojson.dump(consumers, open(args.output_dir+'/entities_markers.geojson', 'w'), indent=2)
 
 
 def main():
