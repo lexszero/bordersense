@@ -120,13 +120,23 @@ aeqd_to_wgs84 = functools.partial(
     pyproj.Proj('+proj=longlat +datum=WGS84 +no_defs'),
 )
 
-POWER_COLORMAP = mpl.colormaps['inferno']
-POWER_COLORNORM= mpl.colors.Normalize(vmin=500, vmax=7400)
-POWER_COVERAGE_COLORNORM= mpl.colors.Normalize(vmin=0, vmax=5)
+COLORMAP_PWR_HIGH = mpl.colormaps['plasma']
+COLORNORM_PWR_HIGH= mpl.colors.Normalize(vmin=0, vmax=7400)
+COLORMAP_PWR_LOW = mpl.colormaps['winter']
+COLORNORM_PWR_LOW= mpl.colors.Normalize(vmin=0, vmax=1250)
+COLORMAP_PWR_COVERAGE = mpl.colormaps['inferno']
+COLORNORM_PWR_COVERAGE= mpl.colors.Normalize(vmin=0, vmax=5)
 def powerneed_color(power):
-    return '#'+bytes(POWER_COLORMAP(POWER_COLORNORM(power), bytes=True))[:3].hex()
+    if power == 0:
+        color = [0, 0, 0]
+    elif power <= 1000:
+        color = COLORMAP_PWR_LOW(1-COLORNORM_PWR_LOW(power), bytes=True)
+    else:
+        color = COLORMAP_PWR_HIGH(COLORNORM_PWR_HIGH(power), bytes=True)
+    return '#'+bytes(color)[:3].hex()
+
 def coverage_color(nr_pdus):
-    return '#'+bytes(POWER_COLORMAP(1-POWER_COVERAGE_COLORNORM(nr_pdus), bytes=True))[:3].hex()
+    return '#'+bytes(COLORMAP_PWR_HIGH(1-COLORNORM_PWR_COVERAGE(nr_pdus), bytes=True))[:3].hex()
 
 def geojson_fixup(j, rename=None, style=None):
     if style:
