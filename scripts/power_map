@@ -661,7 +661,9 @@ def print_consumer_stats(consumers, areas):
 
     camps_high_usage = list(filter(lambda it: it.properties['powerNeed'] >= 3700, camps_powered))
     log.info("")
-    log.info(f"Camps using >3700W - {len(camps_high_usage)} out of {len(camps_powered)}:")
+    log.info(f"Camps total: {len(consumers.features)}")
+    log.info(f"Camps using power: {len(camps_powered)}")
+    log.info(f"Camps using >3700W: {len(camps_high_usage)}")
     for item in camps_high_usage:
         log.info(f"\t{item.properties['name']} ({item.properties['powerArea']}) - {item.properties['powerNeed']/1000:.0f} kW")
 
