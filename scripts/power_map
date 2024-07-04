@@ -277,7 +277,7 @@ def get_power_areas(kml_doc):
                     'name': 'unknown',
                     'total_power': 0,
                     'population': 0,
-                    'area': 9999999
+                    'area': 0
                     })
             ]
     for feature in j['features']:
@@ -688,7 +688,7 @@ def print_area_summary(area):
         return 0
     total_population = area.properties['population']
     area_size = area.properties['area']
-    log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}  {total_population:8} {total_power/total_population:9.0f} {total_population/area_size:11.3f} ")
+    log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}  {total_population:8} {total_power/total_population:9.0f} {area_size/total_population:11.0f} ")
     return total_power
 
 def print_consumer_stats(consumers, areas):
@@ -697,7 +697,7 @@ def print_consumer_stats(consumers, areas):
     all_areas_total_power = 0
     all_consumers_total_power = sum([it.properties['powerNeed'] for it in consumers.features])
     log.info("")
-    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW    people  W/person  people/m^2")
+    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW    people  W/person  m^2/person")
     log.info("\t---------------------------------------------------------------------")
     for area_name in POWER_AREAS_PRIMARY:
         area = areas[area_name][0]
