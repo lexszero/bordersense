@@ -87,6 +87,20 @@ POWER_AREAS_FROM_TRAFO = [
         'PSC', 'PNS', 'PSE', 'PNE', 'PNW', 'The Villa', 'PSS', 'PSW', 'PE'
         ]
 
+POWER_AREAS_PRIMARY = [
+        'unknown',
+        'PX1',
+        'The Villa',
+        'PSC',
+        'PSE',
+        'PSS',
+        'PSW',
+        'PE',
+        'PNS',
+        'PNE',
+        'PNW'
+        ]
+
 GRID_CABLES_MISC = {
         'Main sub E': 63,
         'Garden Line': 63,
@@ -255,13 +269,25 @@ def get_power_areas(kml_doc):
                 kml_to_geojson(folders['areas'], rename='Area'),
                 kml_to_geojson(folders['Roads'], rename='Road')
                 ]])}
-    result = []
+    result = [
+            geojson.Feature(
+                id='unknown',
+                geometry=geojson.Polygon(),
+                properties={
+                    'name': 'unknown',
+                    'total_power': 0,
+                    'population': 0,
+                    'area': 9999999
+                    })
+            ]
     for feature in j['features']:
         if feature.geometry.type != 'Polygon':
             continue
         log.debug(f'Area: {feature.id}')
         feature.properties['name'] = feature.id
         feature.properties['total_power'] = 0
+        feature.properties['population'] = 0
+        feature.properties['area'] = int(coord_transform(wgs84_to_aeqd, shape(feature.geometry)).area)
         result.append(feature)
     return geojson.FeatureCollection(result)
 
@@ -291,7 +317,7 @@ def power_areas_pretty_totals(power_areas):
 def gen_power_areas_list(power_areas):
     result = []
     for area in power_areas.features:
-        if not area.properties['total_power_kw']:
+        if area.properties['name'] == 'unknown' or not area.properties['total_power_kw']:
             continue
         point = shape(area.geometry).centroid.coords[0]
         result.append({
@@ -303,6 +329,30 @@ def gen_power_areas_list(power_areas):
             'total_power_kw_div6': area.properties['total_power_kw_div6'],
             })
     return result
+
+def gen_power_areas_csv(areas, output_dir=None):
+    if output_dir:
+        csv = open(output_dir+"/power_areas.csv", "w")
+    else:
+        log.info("")
+        log.info("Areas:")
+        csv = sys.stdout
+    
+    COLUMNS = [
+        'name',
+        'area',
+        'population',
+        'total_power_kw'
+        ]
+    secondary = filter(lambda it: it not in POWER_AREAS_PRIMARY, areas.keys())
+    for area_name in [*POWER_AREAS_PRIMARY, *secondary]:
+        area = areas[area_name][0]
+        props = area.properties
+        if not props['total_power_kw']:
+            continue
+        line = ';'.join([str(props[key]) for key in COLUMNS])
+        csv.write(line+'\n')
+    csv.close()
 
 def gen_grid_coverage(power_grid):
     result = []
@@ -473,9 +523,9 @@ def simplify_power_grid(power_grid):
     return geojson.FeatureCollection(result)
 
 def get_power_consumers(power_areas):
-    areas = {'unknown': []}
+    areas = {}
     for area in power_areas.features:
-        areas[area.id] = []
+        areas[area.id] = (area, [])
 
     j = requests.get(PLACEMENT_ENTITIES_URL).json()
     log.info(f"Fetched {len(j)} entities")
@@ -485,10 +535,11 @@ def get_power_consumers(power_areas):
             continue
         gj = geojson.loads(item['geoJson'])
         name = gj.properties.get('name')
-        if not name:
+        if not name or name in IGNORE_ENTITIES:
             continue
 
         log.debug(gj.properties)
+        nrOfPeople = int(gj.properties.get('nrOfPeople', 0) or 0)
         power = int(gj.properties.get('powerNeed', 0) or 0)
         if power == -1:
             power = 0
@@ -499,31 +550,37 @@ def get_power_consumers(power_areas):
             log.warning(f"Unrealisticly high power need: '{name}' wants {power} W, ignoring")
             power = 0
 
-        area = find_power_area(power_areas, shape(gj.geometry).centroid)
-        area_name = 'unknown'
-        if area:
-            area_name = area.id
-            #area.properties['total_power'] += power
-        else:
-            if power > 0:
-                log.warning(f"Unable to assign power area: '{name}', power: {power} W")
-            elif name in IGNORE_ENTITIES:
-                continue
+        log.debug(f"Entity: {name}, power: {power}")
 
-        log.debug(f"Entity: {name}, power: {power}, area: {area_name}")
-
+        gj.properties['nrOfPeople'] = nrOfPeople
         gj.properties['powerNeed'] = power
-        gj.properties['powerArea'] = area_name
         for k in ['color', 'nrOfVechiles', 'additionalSqm', 'supressWarnings']:
             del(gj.properties[k])
-        areas[area_name].append(gj)
         consumers.append(gj)
 
-    for area in power_areas.features:
-        area_shape = shape(area.geometry)
-        for item in consumers:
-            if area_shape.contains(shape(item.geometry).centroid):
+    for item in consumers:
+        name = item.properties.get('name')
+        item_shape = shape(item.geometry)
+        power = item.properties.get('powerNeed')
+        area_name = 'unknown'
+        for area in power_areas.features:
+            area_shape = shape(area.geometry)
+            if area_shape.contains(item_shape.centroid):
+                area_name = area.properties['name']
+                if not item.properties.get('powerArea'):
+                    item.properties['powerArea'] = area_name
                 area.properties['total_power'] += item.properties['powerNeed']
+                area.properties['population'] += item.properties['nrOfPeople']
+                areas[area_name][1].append(item)
+        if area_name == 'unknown':
+            area = areas['unknown'][0]
+            if item.properties['powerNeed'] > 0:
+                log.warning(f"Unable to assign power area: '{name}', power: {power} W")
+            item.properties['powerArea'] = area_name
+            area.properties['total_power'] += item.properties['powerNeed']
+            area.properties['population'] += item.properties['nrOfPeople']
+            areas[area_name][1].append(item)
+
 
     return geojson.FeatureCollection(consumers), areas
 
@@ -624,23 +681,34 @@ def check_consumer_coverage(consumers, power_grid):
     for pdu, _ in pdus:
         pdu.properties['power_consumers_kw'] = int(pdu.properties['power_consumers_kw']/1000)
 
+def print_area_summary(area):
+    area_name = area.properties.get('name')
+    total_power = area.properties.get('total_power')
+    if not total_power:
+        return 0
+    total_population = area.properties['population']
+    area_size = area.properties['area']
+    log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}  {total_population:8} {total_power/total_population:9.0f} {total_population/area_size:11.3f} ")
+    return total_power
+
 def print_consumer_stats(consumers, areas):
     log.info("")
     log.info("Power need per power area:")
-    area_total_power = {}
     all_areas_total_power = 0
+    all_consumers_total_power = sum([it.properties['powerNeed'] for it in consumers.features])
     log.info("")
-    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW    people  W/person")
-    log.info("\t--------------------------------------------------------")
-    for area_name, camps in areas.items():
-        total_power = sum([it.properties['powerNeed'] for it in camps])
-        total_population = sum([int(it.properties['nrOfPeople'] or 0) for it in camps])
-        if total_power == 0:
+    log.info(f"\t     Area       P,kW  P/3,kW  P/6,kW    people  W/person  people/m^2")
+    log.info("\t---------------------------------------------------------------------")
+    for area_name in POWER_AREAS_PRIMARY:
+        area = areas[area_name][0]
+        total_power = print_area_summary(area)
+        all_areas_total_power += total_power
+    log.info("\t---------------------------------------------------------------------")
+    for area_name, (area, camps) in areas.items():
+        if area_name in POWER_AREAS_PRIMARY:
             continue
-        log.info(f"\t{area_name:>12} {total_power/1000:7.0f} {total_power/1000/3:7.0f} {total_power/1000/6:7.0f}  {total_population:8}  {total_power/total_population:.0f}")
-        area_total_power[area_name] = total_power
-
-    all_areas_total_power = sum(area_total_power.values())
+        print_area_summary(area)
+    #all_areas_total_power = sum(area_total_power.values())
 
     log.info("\t--------------------------------------------------------")
     log.info("\tFeed lines")
@@ -649,20 +717,22 @@ def print_consumer_stats(consumers, areas):
         label = '+'.join(areas_list)
         power = 0
         for item in areas_list:
-            power += area_total_power[item]
+            power += areas[item][0].properties['total_power']
         log.info(f"\t{label:>12} {power/1000:7.0f} {power/1000/3:7.0f} {power/1000/6:7.0f}")
     log.info("")
     log.info(f"All areas total power: {all_areas_total_power/1000:.0f} kW")
+    log.info(f"All consumers total power: {all_consumers_total_power/1000:.0f} kW")
 
     log.info("")
     log.info("Top 5 consumers per area:")
-    for area_name, camps in sorted(areas.items(), key=lambda it: area_total_power.get(it[0], 0), reverse=True):
-        if not area_total_power.get(area_name):
+    for area_name, (area, camps) in sorted(areas.items(), key=lambda it: it[1][0].properties.get('total_power', 0), reverse=True):
+        total_power = area.properties.get('total_power')
+        if not total_power:
             continue
-        log.info(f"\t{area_name} ({area_total_power[area_name]/1000:.0f} kW):")
+        log.info(f"\t{area_name} ({total_power/1000:.0f} kW):")
         for camp in sorted(camps, key=lambda x: x.properties['powerNeed'], reverse=True)[:5]:
             power = camp.properties['powerNeed']
-            percentage = power/area_total_power[area_name]*100
+            percentage = power/total_power*100
             log.info(f"\t\t'{camp.properties['name']}': {power/1000:.0f} kW / {percentage:.0f}%")
 
     camps_powered = list(sorted(
@@ -722,6 +792,7 @@ def do_full_report(args):
     power_areas_pretty_totals(power_areas)
     geojson.dump(power_areas, open(args.output_dir+'/power_areas.geojson', 'w'), indent=2)
     json.dump(gen_power_areas_list(power_areas), open(args.output_dir+'/power_areas.json', 'w'), indent=2)
+    gen_power_areas_csv(areas, args.output_dir)
     geojson.dump(power_grid, open(args.output_dir+'/power_grid.geojson', 'w'), indent=2)
     geojson.dump(simplify_power_grid(power_grid), open(args.output_dir+'/power_grid_simplified.geojson', 'w'), indent=2)
     geojson.dump(gen_grid_coverage(power_grid), open(args.output_dir+'/power_coverage.geojson', 'w'), indent=2)
