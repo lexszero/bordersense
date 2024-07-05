@@ -9,6 +9,7 @@ import zipfile
 import os, sys
 import requests
 import json
+import csv
 from math import ceil, inf, sqrt
 
 log = logging.getLogger('convert_map')
@@ -522,14 +523,11 @@ def simplify_power_grid(power_grid):
         result.append(feature)
     return geojson.FeatureCollection(result)
 
-def get_power_consumers(power_areas):
-    areas = {}
-    for area in power_areas.features:
-        areas[area.id] = (area, [])
-
+@functools.cache
+def get_placement_entities():
     j = requests.get(PLACEMENT_ENTITIES_URL).json()
     log.info(f"Fetched {len(j)} entities")
-    consumers = []
+    result = []
     for item in j:
         if item['isDeleted']:
             continue
@@ -537,9 +535,6 @@ def get_power_consumers(power_areas):
         name = gj.properties.get('name')
         if not name or name in IGNORE_ENTITIES:
             continue
-
-        log.debug(gj.properties)
-        nrOfPeople = int(gj.properties.get('nrOfPeople', 0) or 0)
         power = int(gj.properties.get('powerNeed', 0) or 0)
         if power == -1:
             power = 0
@@ -549,11 +544,40 @@ def get_power_consumers(power_areas):
         elif power > 100000:
             log.warning(f"Unrealisticly high power need: '{name}' wants {power} W, ignoring")
             power = 0
+        gj.properties['powerNeed'] = power
+        gj.properties['nrOfPeople'] = int(gj.properties.get('nrOfPeople', 0) or 0)
+        result.append(gj)
+    return result
 
+def gen_placement_csv(entities, output_dir):
+    COLUMNS = [
+        'name',
+        'description',
+        'contactInfo',
+        'nrOfPeople',
+        'nrOfVechiles',
+        'additionalSqm',
+        'powerNeed',
+        'amplifiedSound'
+        ]
+
+    with open(output_dir+"/entities.csv", "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter=";")
+        writer.writerow(COLUMNS)
+        for item in entities:
+            writer.writerow([item.properties.get(key) for key in COLUMNS])
+
+def get_power_consumers(power_areas):
+    areas = {}
+    for area in power_areas.features:
+        areas[area.id] = (area, [])
+
+    consumers = []
+    for gj in get_placement_entities():
+        name = gj.properties.get('name')
+        power = gj.properties.get('powerNeed')
         log.debug(f"Entity: {name}, power: {power}")
 
-        gj.properties['nrOfPeople'] = nrOfPeople
-        gj.properties['powerNeed'] = power
         for k in ['color', 'nrOfVechiles', 'additionalSqm', 'supressWarnings']:
             del(gj.properties[k])
         consumers.append(gj)
@@ -632,10 +656,10 @@ def gen_consumer_simplified(consumers):
     result = []
     for item in consumers.features:
         feature = copy.deepcopy(item)
-        if 'powerNrPDUs' in feature.properties:
-            del(feature.properties['powerNrPDUs'])
-        if 'powerDistance' in feature.properties:
-            del(feature.properties['powerDistance'])
+        #if 'powerNrPDUs' in feature.properties:
+        #    del(feature.properties['powerNrPDUs'])
+        #if 'powerDistance' in feature.properties:
+        #    del(feature.properties['powerDistance'])
         if feature.properties['powerArea'] == 'unknown' and feature.properties['powerNeed'] > 0:
             feature.properties['fill'] = '#00ffff'
         else:
@@ -783,6 +807,7 @@ def do_full_report(args):
     print_powermap_stats(power_grid)
 
     log.info("")
+    gen_placement_csv(get_placement_entities(), args.output_dir)
     consumers, areas = get_power_consumers(power_areas)
     check_consumer_coverage(consumers, power_grid)
 
