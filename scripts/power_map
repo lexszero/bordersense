@@ -141,7 +141,9 @@ COLORMAP_PWR_LOW = mpl.colormaps['winter']
 COLORNORM_PWR_LOW= mpl.colors.Normalize(vmin=0, vmax=1250)
 COLORMAP_PWR_COVERAGE = mpl.colormaps['inferno']
 COLORNORM_PWR_COVERAGE= mpl.colors.Normalize(vmin=0, vmax=5)
-def powerneed_color(power):
+COLORMAP_SOUND = mpl.colormaps['cool']
+COLORNORM_SOUND= mpl.colors.Normalize(vmin=0, vmax=10000)
+def color_power_need(power):
     if power == 0:
         color = [0, 0, 0]
     elif power <= 1000:
@@ -150,8 +152,12 @@ def powerneed_color(power):
         color = COLORMAP_PWR_HIGH(COLORNORM_PWR_HIGH(power), bytes=True)
     return '#'+bytes(color)[:3].hex()
 
-def coverage_color(nr_pdus):
+def color_grid_coverage(nr_pdus):
     return '#'+bytes(COLORMAP_PWR_HIGH(1-COLORNORM_PWR_COVERAGE(nr_pdus), bytes=True))[:3].hex()
+
+def color_sound(sound):
+    return '#'+bytes(COLORMAP_SOUND(COLORNORM_SOUND(sound), bytes=True))[:3].hex()
+
 
 def geojson_fixup(j, rename=None, style=None):
     if style:
@@ -614,24 +620,26 @@ def gen_consumer_markers(consumers):
         if item.geometry.type != 'Polygon':
             continue
         point = shape(item.geometry).centroid
-        nrOfPeople = int(item.properties['nrOfPeople'] or 0)
-#        if int(item.properties.get('amplifiedSound', 0) or 0) >= 999:
-#            markers.append(geojson.Feature(
-#                geometry=point,
-#                properties={
-#                    'name': '[Sound] ' + item.properties['name'],
-#                    **ENTITY_STYLE_NOISY
-#                    }
-#                ))
-        if nrOfPeople > 0:
+        sound = int(item.properties['amplifiedSound'] or 0)
+        if sound > 100:
             markers.append(geojson.Feature(
                 geometry=point,
                 properties={
-                    'name': item.properties['name'],
-                    'marker-size': sqrt(nrOfPeople)*2,
-                    'marker-color': powerneed_color(item.properties['powerNeed'])
+                    'name': '[Sound] ' + item.properties['name'],
+                    'marker-size': min(2+(sound/500), 10),
+                    'marker-color': color_sound(sound)
                     }
                 ))
+#        nrOfPeople = int(item.properties['nrOfPeople'] or 0)
+#        if nrOfPeople > 0:
+#            markers.append(geojson.Feature(
+#                geometry=point,
+#                properties={
+#                    'name': item.properties['name'],
+#                    'marker-size': sqrt(nrOfPeople)*2,
+#                    'marker-color': color_power_need(item.properties['powerNeed'])
+#                    }
+#                ))
     return geojson.FeatureCollection(markers)
 
 def gen_consumer_list(consumers):
@@ -660,10 +668,7 @@ def gen_consumer_simplified(consumers):
         #    del(feature.properties['powerNrPDUs'])
         #if 'powerDistance' in feature.properties:
         #    del(feature.properties['powerDistance'])
-        if feature.properties['powerArea'] == 'unknown' and feature.properties['powerNeed'] > 0:
-            feature.properties['fill'] = '#00ffff'
-        else:
-            feature.properties['fill'] = powerneed_color(item.properties['powerNeed'])
+        feature.properties['fill'] = color_power_need(item.properties['powerNeed'])
         result.append(feature)
     return geojson.FeatureCollection(result)
 
@@ -678,7 +683,7 @@ def check_consumer_coverage(consumers, power_grid):
 
     for item in consumers.features:
         if not item.properties['powerNeed']:
-            item.properties['fill'] = coverage_color(10)
+            item.properties['fill'] = color_grid_coverage(10)
             continue
         name = item.properties['name']
         p_item = coord_transform(wgs84_to_aeqd, shape(item.geometry).centroid)
@@ -700,7 +705,7 @@ def check_consumer_coverage(consumers, power_grid):
             item.properties['fill'] = '#ff0000'
 
         item.properties['powerDistance'] = int(best_distance)
-        item.properties['fill'] = coverage_color(item.properties['powerNrPDUs'])
+        item.properties['fill'] = color_grid_coverage(item.properties['powerNrPDUs'])
 
     for pdu, _ in pdus:
         pdu.properties['power_consumers_kw'] = int(pdu.properties['power_consumers_kw']/1000)
