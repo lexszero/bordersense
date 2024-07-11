@@ -1,102 +1,40 @@
 import logging
-import asyncio
-from pydantic import BaseModel, conint
-from typing import List, Literal
+from pydantic import BaseModel
 
-from pymodbus.server import StartAsyncSerialServer
-from pymodbus.transaction import ModbusRtuFramer
-from pymodbus.datastore import ModbusServerContext
-
-from .transport import Transport, TransportRAK7431, TransportDragino
-from .modbus_device import ModbusDevice
-
-log = logging.getLogger('sensor_node')
-
-class ModbusSlaveConfig(BaseModel):
-    address: int = conint(ge=0, le=255)
-    device_conf: str
+log = logging.getLogger("sensor_node")
 
 class SensorNodeConfig(BaseModel):
-    transport: Literal['rak7431', 'dragino']
-    poll_period: int
-    modbus_slaves: List[ModbusSlaveConfig]
+    device_type: str
 
-transport_classes = {
-        'rak7431': TransportRAK7431,
-        'dragino': TransportDragino
-        }
+DEVICE_TYPES = {}
 
 class SensorNode:
-    config: SensorNodeConfig
-    transport: Transport
-    modbus_slaves: List[ModbusDevice]
+    @staticmethod
+    def register(device_type: str, cls, conf_cls):
+        log.info(f"Registering device type {device_type}")
+        DEVICE_TYPES[device_type] = (cls, conf_cls)
 
-    def __init__(self, conf_file: str):
+    @staticmethod
+    def create(conf_file: str):
         log.info(f"Loading sensor node configuration {conf_file}")
+        conf_data = None
         with open(conf_file, 'r') as f:
-            self.config = SensorNodeConfig.model_validate_json(f.read())
+            conf_data = f.read()
 
-        self.transport = transport_classes[self.config.transport]
-        self.modbus_slaves: List[ModbusDevice] = []
+        config = SensorNodeConfig.model_validate_json(conf_data)
 
-        total_regs = 0
-        all_blocks = []
-        for slave_conf in self.config.modbus_slaves:
-            max_resp_regs = None
-            if self.transport.MAX_RESPONSE_BYTES:
-                max_resp_regs = self.transport.MAX_RESPONSE_BYTES/2
-            slave = ModbusDevice(slave_conf.address, 'devices/'+slave_conf.device_conf, max_response_regs=max_resp_regs)
-            all_blocks += slave.all_blocks
-            for n, b in enumerate(slave.all_blocks):
-                log.info(f"block #{n} {b.name}: 0x{b.start:04x} - 0x{b.start+b.size:04x}   ({b.size} regs, {b.size*2} bytes)")
-                for cn, chan in enumerate(b.chans):
-                    log.info(f"   chan #{cn:>4}   {chan['address']}: {chan['name']:<32} {chan.get('format', ''):<5}")
-                total_regs += b.size
+        device_class, config_class = DEVICE_TYPES[config.device_type]
+        device_config = config_class.model_validate_json(conf_data)
+        return device_class(device_config)
 
-            self.modbus_slaves.append(slave)
-        log.info(f"Total {len(all_blocks)} reads, {total_regs} regs")
+    def configure_local(self, args):
+        log.fatal("Undefined configure_local")
 
-    def print_reads(self, args):
-        for slave in self.modbus_slaves:
-            for req in slave.read_requests():
-                log.info(f'Read request: {req}')
+    def do_configure_local(self, args):
+        self.configure_local(args)
 
-    def gen_parser(self, args):
-        js = self.transport.gen_slave_response_parser(self.modbus_slaves)
-        print(js)
+    def configure_lora(self, args):
+        log.fatal("Undefined configure_lora")
 
-    def configure_transport_local(self, args):
-        requests = []
-        for slave in self.modbus_slaves:
-            requests += slave.read_requests()
-        self.transport.configure_local(requests, args.port)
-
-    def configure_transport_lora(self, args):
-        requests = []
-        for slave in self.modbus_slaves:
-            requests += slave.read_requests()
-        self.transport.configure_lora(requests, args.dev_eui, args.serial)
-
-    def emulate_modbus(self, args):
-        slaves = {}
-        for slave in self.modbus_slaves:
-            slaves[slave.address] = slave.emulated_slave_context()
-        context = ModbusServerContext(slaves=slaves)
-
-        asyncio.run(StartAsyncSerialServer(
-            context=context,  # Data storage
-            framer=ModbusRtuFramer,
-            # timeout=1,  # waiting time for request to complete
-            port=args.port,  # serial port
-            # custom_functions=[],  # allow custom handling
-            stopbits=2,  # The number of stop bits to use
-            bytesize=8,  # The bytesize of the serial messages
-            parity="N",  # Which kind of parity to use
-            baudrate=9600,  # The baud rate to use for the serial device
-            handle_local_echo=True,  # Handle local echo of the USB-to-RS485 adaptor
-            #ignore_missing_slaves=False,  # ignore request to a missing slave
-            # broadcast_enable=False,  # treat slave_id 0 as broadcast address,
-            # strict=True,  # use strict timing, t1.5 for Modbus RTU
-            ))
-
-
+    def do_configure_lora(self, args):
+        self.configure_lora(args)

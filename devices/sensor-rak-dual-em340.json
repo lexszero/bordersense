@@ -5,6 +5,10 @@
     {
       "address": 1,
       "device_conf": "meter-em340.json"
+    },
+    {
+      "address": 2,
+      "device_conf": "meter-em340.json"
     }
   ]
 }

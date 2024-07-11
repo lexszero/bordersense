@@ -1,5 +1,5 @@
 {
-  "transport": "dragino",
+  "device_type": "dragino-rs485",
   "poll_period": 60,
   "modbus_slaves": [
     {

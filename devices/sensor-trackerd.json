@@ -1,0 +1,6 @@
+{
+  "device_type": "trackerd",
+  "fix_time": 600,
+  "update_interval_static": 60,
+  "update_interval_motion": 10
+}

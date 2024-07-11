@@ -1,1 +1,1 @@
-from .sensor_node import SensorNode
+from .sensor_node_modbus import SensorNodeModbus

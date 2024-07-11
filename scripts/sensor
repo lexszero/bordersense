@@ -2,7 +2,9 @@
 import os, sys
 import logging, coloredlogs, argparse
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from sensor_node import SensorNode
+from sensor_node.sensor_node import SensorNode
+from sensor_node.sensor_node_modbus import SensorNodeModbus
+from sensor_node.sensor_node_tracker import SensorNodeTrackerDragino
 
 coloredlogs.install(
         fmt="%(name)s %(levelname)s: %(message)s",
@@ -18,24 +20,24 @@ def main():
 
     actions = parser.add_subparsers(title="Action", required=True)
 
-    act_print_requests = actions.add_parser("print", help="Print read requests")
-    act_print_requests.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
-    act_print_requests.set_defaults(func=SensorNode.print_reads)
-
-    act_gen_parser = actions.add_parser("gen_parser", help="Generate JS for node-red")
-    act_gen_parser.set_defaults(func=SensorNode.gen_parser)
-
-    act_conf_local = actions.add_parser("conf_local", help="Configure transport via serial")
-    act_conf_local.set_defaults(func=SensorNode.configure_transport_local)
+    act_conf_local = actions.add_parser("conf_local", help="Configure via serial")
+    act_conf_local.set_defaults(func=SensorNode.do_configure_local)
     act_conf_local.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
 
-    act_conf_remote = actions.add_parser("conf_remote", help="Configure transport via LoRa uplinks")
+    act_conf_remote = actions.add_parser("conf_remote", help="Configure via LoRa uplinks")
     act_conf_remote.add_argument("-d", "--dev_eui", type=str, required=True, help="Device EUI")
     act_conf_remote.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
-    act_conf_remote.set_defaults(func=SensorNode.configure_transport_lora)
+    act_conf_remote.set_defaults(func=SensorNode.do_configure_lora)
+
+    act_print_requests = actions.add_parser("print", help="Print read requests")
+    act_print_requests.add_argument("-s", "--serial", type=lambda s: int(s, 0), help="Start serial", default=0)
+    act_print_requests.set_defaults(func=SensorNodeModbus.print_reads)
+
+    act_gen_parser = actions.add_parser("gen_parser", help="Generate JS for node-red")
+    act_gen_parser.set_defaults(func=SensorNodeModbus.gen_parser)
 
     act_emulate = actions.add_parser("emulate", help="Emulate modbus slaves for testing")
-    act_emulate.set_defaults(func=SensorNode.emulate_modbus)
+    act_emulate.set_defaults(func=SensorNodeModbus.emulate_modbus)
     act_emulate.add_argument("-p", "--port", type=str, default="/dev/ttyUSB0", help="Serial port (default: %(default)s)")
 
     args = parser.parse_args()
@@ -43,7 +45,7 @@ def main():
     if args.debug:
         coloredlogs.set_level(logging.DEBUG)
 
-    node = SensorNode(args.config)
+    node = SensorNode.create(args.config)
     args.func(node, args)
 
 if __name__ == '__main__':

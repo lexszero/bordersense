@@ -1,0 +1,10 @@
+{
+  "device_type": "dragino-rs485",
+  "poll_period": 60,
+  "modbus_slaves": [
+    {
+      "address": 48,
+      "device_conf": "meter-map12e-fw2.json"
+    }
+  ]
+}
