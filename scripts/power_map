@@ -90,6 +90,7 @@ POWER_AREAS_FROM_TRAFO = [
 
 POWER_AREAS_PRIMARY = [
         'unknown',
+        'Native Grid',
         'PX1',
         'The Villa',
         'PSC',
@@ -135,6 +136,7 @@ aeqd_to_wgs84 = functools.partial(
     pyproj.Proj('+proj=longlat +datum=WGS84 +no_defs'),
 )
 
+COLOR_NATIVE = "#0B60FF"
 COLORMAP_PWR_HIGH = mpl.colormaps['plasma']
 COLORNORM_PWR_HIGH= mpl.colors.Normalize(vmin=0, vmax=7400)
 COLORMAP_PWR_LOW = mpl.colormaps['winter']
@@ -213,11 +215,11 @@ def power_item_order(item):
 
 def power_item_desc(item):
     if not item:
-        return None
+        return ""
     name = item.properties.get('Name', '')
-    desc = item.properties.get('description', '')
+    desc = item.properties.get('description')
     if desc:
-        return f"{name} / {desc}"
+        return f"{name} / {desc}".replace("\n", " ")
     else:
         return name
 
@@ -230,6 +232,11 @@ def is_grid_feature(feature):
         log.warning(f"not a grid feature: {power_item_desc(feature)}")
         return False
     return True
+
+def is_grid_native(feature):
+    desc = power_item_desc(feature)
+    if re.search(r'native', desc, re.IGNORECASE):
+        return True
 
 def find_power_area(power_areas, item):
     for area in power_areas.features:
@@ -290,6 +297,7 @@ def get_power_areas(kml_doc):
     for feature in j['features']:
         if feature.geometry.type != 'Polygon':
             continue
+        feature.id = feature.id.strip()
         log.debug(f'Area: {feature.id}')
         feature.properties['name'] = feature.id
         feature.properties['total_power'] = 0
@@ -401,6 +409,8 @@ def print_powermap_stats(power_grid):
     all_pdus = {}
     for item in power_grid.features:
         log.debug(item)
+        if is_grid_native(item):
+            continue
         if item.geometry.type == 'Point':
             all_pdus.setdefault(item.properties['power_size'], []).append(item)
         elif item.geometry.type == 'LineString':
@@ -444,8 +454,12 @@ def gen_powermap_csv(power_grid, output_dir=None):
 
     for item in filter(lambda it: it.geometry.type == 'LineString', power_grid.features):
         props = item.properties
+        desc = power_item_desc(item)
+        if is_grid_native(item):
+            log.info(f"Excluding {desc}")
+            continue
         length = line_length(item)
-        csv.write(f"{props['power_area']};{power_item_desc(item)};{props['power_size']};{length:.0f}\n")
+        csv.write(f"{props['power_area']};{desc};{props['power_size']};{length:.0f}\n")
 
     if output_dir:
         csv.close()
@@ -457,6 +471,10 @@ def gen_powermap_csv(power_grid, output_dir=None):
 
     pdus = {}
     for item in filter(lambda it: it.geometry.type == 'Point', power_grid.features):
+        desc = power_item_desc(item)
+        if is_grid_native(item):
+            log.info(f"Excluding {desc}")
+            continue
         pdus.setdefault(item.properties['power_size'], []).append(item)
     pdus_line = ';'.join([str(len(pdus.get(power_size, []))) for power_size in POWER_ITEM_SIZE_ORDER])
     csv.write(pdus_line + "\n")
@@ -486,9 +504,17 @@ def get_power_grid(kml_doc):
             else:
                 log.warning(f"can't determine PDU type: {power_item_desc(feature)}")
 
+            m = re.search(r'area:(\w+)', feature.properties.get('description', ''))
+            if m:
+                area = m.group(1)
+                log.info(f"force {power_item_desc(feature)} to area {area}")
+            else:
+                area = find_power_area_name(power_areas, shape(feature.geometry))
+                feature.properties['power_area'] = area
             feature.properties['power_size'] = amps
-            feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
             feature.properties['marker-size'] = GRID_STYLE[amps]['marker-size']
+            if is_grid_native(feature):
+                feature.properties['marker-color'] = COLOR_NATIVE
             log.debug(f"PDU: {feature.properties['power_size']} ({feature.properties['power_area']})")
         elif feature.geometry.type == 'LineString':
             amps = 'unknown'
@@ -509,9 +535,19 @@ def get_power_grid(kml_doc):
             if amps == '230':
                 amps = '1f'
 
+            m = re.search(r'area:(\w+)', feature.properties.get('description', ''))
+            if m:
+                area = m.group(1)
+                log.info(f"force {power_item_desc(feature)} to area {area}")
+            else:
+                area = find_power_area_name(power_areas, shape(feature.geometry))
+                feature.properties['power_area'] = area
+
+            feature.properties['power_area'] = area
             feature.properties['power_size'] = amps
-            feature.properties['power_area'] = find_power_area_name(power_areas, shape(feature.geometry))
             feature.properties['stroke-width'] = GRID_STYLE[amps]['stroke-width']
+            if is_grid_native(feature):
+                feature.properties['stroke'] = COLOR_NATIVE
             log.debug(f"Line: {feature.properties['power_size']} ({feature.properties['power_area']})")
         else:
             log.debug(f"skip {power_item_desc(feature)}")
@@ -582,7 +618,6 @@ def get_power_consumers(power_areas):
     for gj in get_placement_entities():
         name = gj.properties.get('name')
         power = gj.properties.get('powerNeed')
-        log.debug(f"Entity: {name}, power: {power}")
 
         for k in ['color', 'nrOfVechiles', 'additionalSqm', 'supressWarnings']:
             del(gj.properties[k])
@@ -593,6 +628,7 @@ def get_power_consumers(power_areas):
         item_shape = shape(item.geometry)
         power = item.properties.get('powerNeed')
         area_name = 'unknown'
+        item_areas = []
         for area in power_areas.features:
             area_shape = shape(area.geometry)
             if area_shape.contains(item_shape.centroid):
@@ -602,6 +638,7 @@ def get_power_consumers(power_areas):
                 area.properties['total_power'] += item.properties['powerNeed']
                 area.properties['population'] += item.properties['nrOfPeople']
                 areas[area_name][1].append(item)
+                item_areas.append(area_name)
         if area_name == 'unknown':
             area = areas['unknown'][0]
             if item.properties['powerNeed'] > 0:
@@ -610,6 +647,7 @@ def get_power_consumers(power_areas):
             area.properties['total_power'] += item.properties['powerNeed']
             area.properties['population'] += item.properties['nrOfPeople']
             areas[area_name][1].append(item)
+        log.debug(f"Entity: {name}, power: {power}, areas: {item_areas}")
 
 
     return geojson.FeatureCollection(consumers), areas
@@ -799,7 +837,7 @@ def do_update_placement(args):
 
     hoods = geojson.loads(requests.get(PLACEMENT_HOODS_URL).content)
     hoods_labels = geojson.loads(requests.get(PLACEMENT_HOODS_LABELS_URL).content)
-    hoods.features += hoods_labels.features
+#    hoods.features += hoods_labels.features
     roads = geojson.loads(requests.get(PLACEMENT_ROADS_URL).content)
     hoods.features += [it for it in roads.features if it.properties.get('type') not in ['oktocamp', 'publicplease']]
     geojson.dump(hoods, open(args.output_dir+'/neighbourhoods.geojson', 'w'), indent=2)
