@@ -91,6 +91,7 @@ POWER_AREAS_FROM_TRAFO = [
 POWER_AREAS_PRIMARY = [
         'unknown',
         'Native Grid',
+        'DoET',
         'PX1',
         'The Villa',
         'PSC',
@@ -136,7 +137,7 @@ aeqd_to_wgs84 = functools.partial(
     pyproj.Proj('+proj=longlat +datum=WGS84 +no_defs'),
 )
 
-COLOR_NATIVE = "#0B60FF"
+COLOR_NATIVE = "#00B9DF"
 COLORMAP_PWR_HIGH = mpl.colormaps['plasma']
 COLORNORM_PWR_HIGH= mpl.colors.Normalize(vmin=0, vmax=7400)
 COLORMAP_PWR_LOW = mpl.colormaps['winter']
